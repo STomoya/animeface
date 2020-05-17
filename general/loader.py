@@ -18,7 +18,7 @@ class AnimeFaceDataset(Dataset):
         self.image_paths = self._load()
         self.length = len(self.image_paths)
         self.transform = transforms.Compose([
-            transforms.Resize(image_size),
+            transforms.Resize((image_size, image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
