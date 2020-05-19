@@ -12,5 +12,6 @@ services:
         volumes:
             - .:/usr/src
             - /mnt/D/Data/animefacedataset:/usr/src/data
+            - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
         working_dir: /usr/src
         tty: true
