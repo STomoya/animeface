@@ -4,3 +4,7 @@ torchvision
 pillow
 matplotlib
 tqdm
+chainer
+illustration2vec
+scikit-image
+scipy
