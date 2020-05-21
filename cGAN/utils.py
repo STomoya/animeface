@@ -79,8 +79,8 @@ def main(
 ):
     epochs = 150
     latent_dim = 200
-    label_type, label_dim = 'i2v', 28
-    # label_type, label_dim = 'year', 20
+    # label_type, label_dim = 'i2v', 28
+    label_type, label_dim = 'year', 20
 
     G = Generator(latent_dim=latent_dim, label_dim=label_dim)
     D = Discriminator(label_dim=label_dim)
