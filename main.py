@@ -2,6 +2,7 @@ from general import *
 from GAN import main as gan_main
 from DCGAN import main as dcgan_main
 from cGAN import main as cgan_main
+from ACGAN import main as acgan_main
 
 def main():
     image_size = 128
@@ -11,7 +12,7 @@ def main():
     dataset = OneHotLabeledAnimeFaceDataset(image_size=image_size)
     dataset = to_loader(dataset=dataset, batch_size=batch_size)
 
-    cgan_main(
+    acgan_main(
         dataset=dataset,
         image_size=image_size
     )
