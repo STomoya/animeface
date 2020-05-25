@@ -58,7 +58,7 @@ for path in tqdm(image_paths):
     line = ','.join([str(path), sorted_tag2prob[0][0].replace(' ', '_'), year])    
     lines.append(line)
 
-with open('/usr/src/data/labels.csv', 'w', encoding='utf-8') as fout:
+with open('/usr/src/data/animefacedataset/labels.csv', 'w', encoding='utf-8') as fout:
     fout.write('\n'.join(lines))
 
 # analysis
