@@ -7,15 +7,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
 import numpy as np
-from sklearn.preprocessing import OneHotEncoder
-
-def to_loader(
-    dataset,
-    batch_size,
-    shuffle=True
-):
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    return loader
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 class AnimeFaceDataset(Dataset):
     '''
@@ -45,7 +37,7 @@ class AnimeFaceDataset(Dataset):
         return image
 
     def _load(self):
-        base = Path('/usr/src/data/images')
+        base = Path('/usr/src/data/animefacedataset/images')
         image_paths = base.glob('*')
         image_paths = [str(path) for path in image_paths]
         return image_paths
@@ -57,8 +49,15 @@ class LabeledAnimeFaceDataset(Dataset):
     images, illustration2vec tags, and year
     '''
     def __init__(self, image_size):
-        self.image_paths, self.i2v_labels, self.year_labels = self._load()
+        self.image_paths, i2v_labels, year_labels = self._load()
         self.length = len(self.image_paths)
+
+        self.i2v_encoder = LabelEncoder()
+        self.year_encoder = LabelEncoder()
+        i2v_labels  = np.array(i2v_labels).reshape(-1, 1)
+        year_labels = np.array(year_labels).reshape(-1, 1)
+        self.i2v_labels = self.i2v_encoder.fit_transform(i2v_labels)
+        self.year_labels = self.year_encoder.fit_transform(year_labels)
 
         self.transform = transforms.Compose([
             transforms.Resize((image_size, image_size)),
@@ -82,7 +81,7 @@ class LabeledAnimeFaceDataset(Dataset):
         return image, {'i2v' : i2v_label, 'year' : year_label}
 
     def _load(self):
-        dataset_file_path = '/usr/src/data/labels.csv'
+        dataset_file_path = '/usr/src/data/animefacedataset/labels.csv'
         with open(dataset_file_path, 'r', encoding='utf-8') as fin:
             csv_reader = csv.reader(fin)
             data_list = [line for line in csv_reader]
@@ -151,7 +150,7 @@ class OneHotLabeledAnimeFaceDataset(Dataset):
         return self.year_onehot_encoder.inverse_transform(onehot)
 
     def _load(self):
-        dataset_file_path = '/usr/src/data/labels.csv'
+        dataset_file_path = '/usr/src/data/animefacedataset/labels.csv'
         with open(dataset_file_path, 'r', encoding='utf-8') as fin:
             csv_reader = csv.reader(fin)
             data_list = [line for line in csv_reader]
@@ -167,6 +166,14 @@ class OneHotLabeledAnimeFaceDataset(Dataset):
 
 
 if __name__ == "__main__":
+    def to_loader(
+        dataset,
+        batch_size,
+        shuffle=True
+    ):
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        return loader
+
     dataset = AnimeFaceDataset(100)
     dataset = to_loader(dataset, 32)
     for data in dataset:
