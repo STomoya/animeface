@@ -2,6 +2,8 @@
 from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 
+from torch.utils.data import DataLoader
+
 def to_loader(
     dataset,
     batch_size,
