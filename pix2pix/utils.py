@@ -10,7 +10,6 @@ from .model import Generator, Discriminator, weights_init_normal
 def train(
     epochs,
     dataset,
-    latent_dim,
     G,
     optimizer_G,
     D,
@@ -98,9 +97,9 @@ def train(
             
 
             if batches_done % save_interval == 0:
-                num_images = 3
+                num_images = 32
                 images = grid(pair, gen_image, target, num_images)
-                save_image(images, "pix2pix/result/%d.png" % batches_done, nrow=1*3, normalize=True)
+                save_image(images, "pix2pix/result/%d.png" % batches_done, nrow=4*3, normalize=True)
 
     return losses
 
@@ -170,15 +169,14 @@ def main(
 ):
 
     image_size = 256
-    epochs = 10
-    latent_dim = 200
+    epochs = 100
     lr = 0.0002
     betas = (0.5, 0.999)
     pixelwise_gamma = 100
 
     batch_size = 32
 
-    pair_transform = SoftMozaic(linear_scale=8)
+    pair_transform = Mozaic(linear_scale=2)
     dataset = dataset_class(pair_transform=pair_transform, image_size=256)
     dataset = to_loader(dataset, batch_size)
 
@@ -198,10 +196,9 @@ def main(
     validity_criterion = nn.MSELoss()
     pixelwise_criterion = nn.L1Loss()
 
-    train(
+    losses = train(
         epochs=epochs,
         dataset=dataset,
-        latent_dim=latent_dim,
         G=G,
         optimizer_G=optimizer_G,
         D=D,
@@ -211,5 +208,7 @@ def main(
         pixelwise_gamma=pixelwise_gamma,
         device=device,
         verbose_interval=1000,
-        save_interval=100
+        save_interval=1000
     )
+
+    plot_loss(losses)
