@@ -5,6 +5,7 @@ from cGAN import main as cgan_main
 from ACGAN import main as acgan_main
 from pixelshuffle import main as pixelshuffle_main
 from WGAN import main as wgan_main
+from WGAN_gp import main as wgan_gp_main
 
 from pix2pix import main as pix2pix_main
 
@@ -16,7 +17,7 @@ def main():
     # dataset = OneHotLabeledAnimeFaceDataset(image_size=image_size)
     dataset = to_loader(dataset=dataset, batch_size=batch_size)
 
-    wgan_main(
+    wgan_gp_main(
         dataset=dataset,
         image_size=image_size
     )
