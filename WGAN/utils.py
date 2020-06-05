@@ -52,7 +52,7 @@ def train(
             for param in D.parameters():
                 param.data.clamp_(-clip_value, clip_value)
 
-            if index % n_critic:
+            if index % n_critic == 0:
 
                 # train to fool D
                 g_loss = -torch.mean(D(fake_image))
