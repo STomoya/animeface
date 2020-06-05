@@ -26,12 +26,6 @@ def train(
         for index, image in enumerate(dataset, 1):
             g_loss = None
 
-            # label smoothing
-            gt   = torch.from_numpy((1.0 - 0.7) * np.random.randn(image.size(0), 1) + 0.7)
-            gt   = gt.type(torch.FloatTensor).to(device)
-            fake = torch.from_numpy((0.3 - 0.0) * np.random.randn(image.size(0), 1) + 0.0)
-            fake = fake.type(torch.FloatTensor).to(device)
-
             image = image.to(device)
 
             z = torch.from_numpy(np.random.normal(0, 1, (image.size(0), latent_dim)))
