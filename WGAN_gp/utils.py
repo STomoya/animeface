@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.autograd as autograd
 from torchvision.utils import save_image
 import numpy as np
 
@@ -10,7 +11,7 @@ from .model import Generator, Discriminator, weights_init_normal
 def train(
     epochs,
     n_critic,
-    clip_value,
+    gp_gamma,
     dataset,
     latent_dim,
     G,
@@ -35,16 +36,13 @@ def train(
             fake_image = G(z)
 
             # discriminator loss
-            d_loss = -torch.mean(D(image)) + torch.mean(D(fake_image.detach()))
+            grad_penalty = gradient_penalty(D, image.data, fake_image.data, device)
+            d_loss = -torch.mean(D(image)) + torch.mean(D(fake_image.detach())) + gp_gamma * grad_penalty
 
             # optimize
             optimizer_D.zero_grad()
             d_loss.backward()
             optimizer_D.step()
-
-            # clip weights
-            for param in D.parameters():
-                param.data.clamp_(-clip_value, clip_value)
 
             if index % n_critic == 0:
 
@@ -66,7 +64,30 @@ def train(
             
             fake_image.view(fake_image.size(0), -1)
             if batches_done % save_interval == 0 or batches_done == 1:
-                save_image(fake_image.data[:25], "WGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(fake_image.data[:25], "WGAN_gp/result/%d.png" % batches_done, nrow=5, normalize=True)
+
+def gradient_penalty(D, real_image, fake_image, device):
+    alpha = torch.from_numpy(np.random.random((real_image.size(0), 1, 1, 1)))
+    alpha = alpha.type(torch.FloatTensor).to(device)
+
+    interpolates = (alpha * real_image + ((1 - alpha) * fake_image)).requires_grad_(True)
+    d_interpolates = D(interpolates)
+
+    fake = torch.Tensor(real_image.size(0), 1).fill_(1.).requires_grad_(False)
+    fake = fake.type(torch.FloatTensor).to(device)
+
+    gradients = autograd.grad(
+        outputs=d_interpolates.view(d_interpolates.size(0), 1),
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True
+    )[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+
+    return penalty
 
 def main(
     dataset,
@@ -74,9 +95,10 @@ def main(
 ):
     epochs = 150
     latent_dim = 200
-    lr = 5.e-5
+    lr = 2.e-4
+    betas = (0.5, 0.999)
     n_critic = 5
-    clip_value = 0.01
+    gp_gamma = 10
 
     G = Generator(latent_dim=latent_dim)
     D = Discriminator()
@@ -88,13 +110,13 @@ def main(
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.RMSprop(G.parameters(), lr=lr)
-    optimizer_D = optim.RMSprop(D.parameters(), lr=lr)
+    optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=betas)
 
     train(
         epochs=epochs,
         n_critic=n_critic,
-        clip_value=clip_value,
+        gp_gamma=gp_gamma,
         dataset=dataset,
         latent_dim=latent_dim,
         G=G,
