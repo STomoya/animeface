@@ -1,4 +1,6 @@
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,9 +18,15 @@ class PixelNorm(nn.Module):
         return x * denom
 
 class EqualizedLR(nn.Module):
+    def __init__(self, layer, gain=2):
+        super(EqualizedLR, self).__init__()
+
+        self.wscale = (gain / layer.weight[0].numel()) ** 0.5
+        self.layer = layer
+
     def forward(self, x, gain=2):
-        scale = (gain / x.shape[1])**0.5
-        return x * scale
+        x = self.layer(x * self.wscale)
+        return x
 
 class MiniBatchStd(nn.Module):
     def forward(self, x):
@@ -44,21 +52,61 @@ class Conv2d(nn.Module):
         out_channels,
         kernel_size,
         stride=1,
-        padding=0
+        padding=0,
+        equalized=True
     ):
         super(Conv2d, self).__init__()
-        
-        self.conv = nn.Conv2d(
+
+        conv = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=padding
         )
-        nn.init.kaiming_normal_(self.conv.weight)
-    
+
+        conv.bias.data.fill_(0)
+        conv.weight.data.normal_(0, 1)
+
+        if equalized:
+            self.conv = EqualizedLR(conv)
+        else:
+            self.conv = conv
+
     def forward(self, x):
-        return self.conv(x)
+        x = self.conv(x)
+        return x
+
+class ConvTranspose2d(nn.Module):
+    def __init__(self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        equalized=True
+    ):
+        super(ConvTranspose2d, self).__init__()
+
+        conv = nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding
+        )
+
+        conv.bias.data.fill_(0)
+        conv.weight.data.normal_(0, 1)
+
+        if equalized:
+            self.conv = EqualizedLR(conv)
+        else:
+            self.conv = conv
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
 
 class ToRGB(nn.Module):
     '''
@@ -71,7 +119,6 @@ class ToRGB(nn.Module):
         super(ToRGB, self).__init__()
 
         self.to_rgb = nn.Sequential(
-            EqualizedLR(),
             Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -95,7 +142,6 @@ class FromRGB(nn.Module):
         super(FromRGB, self).__init__()
 
         self.from_rgb = nn.Sequential(
-            EqualizedLR(),
             Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -120,15 +166,13 @@ class ResolutionBlock(nn.Module):
 
         if is_first:
             self.block = nn.Sequential(
-                EqualizedLR(),
-                nn.ConvTranspose2d(
+                ConvTranspose2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=4,
                 ),
                 PixelNorm(),
                 nn.LeakyReLU(0.2),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
@@ -138,11 +182,9 @@ class ResolutionBlock(nn.Module):
                 PixelNorm(),
                 nn.LeakyReLU(0.2)
             )
-            nn.init.kaiming_normal_(self.block[1].weight)
         else:
             self.block = nn.Sequential(
                 nn.Upsample(scale_factor=2),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -151,7 +193,6 @@ class ResolutionBlock(nn.Module):
                 ),
                 PixelNorm(),
                 nn.LeakyReLU(0.2),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
@@ -179,7 +220,6 @@ class DownResolutionBlock(nn.Module):
             self.block = nn.Sequential(
                 MiniBatchStd(),
                 GaussianNoise(resl, loss_type),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=in_channels+1,
                     out_channels=out_channels,
@@ -188,14 +228,12 @@ class DownResolutionBlock(nn.Module):
                 ),
                 nn.LeakyReLU(0.2),
                 GaussianNoise(resl, loss_type),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
                     kernel_size=4
                 ),
                 nn.LeakyReLU(0.2),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=1,
@@ -205,7 +243,6 @@ class DownResolutionBlock(nn.Module):
         else:
             self.block = nn.Sequential(
                 GaussianNoise(resl, loss_type),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -214,7 +251,6 @@ class DownResolutionBlock(nn.Module):
                 ),
                 nn.LeakyReLU(0.2),
                 GaussianNoise(resl, loss_type),
-                EqualizedLR(),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
@@ -350,7 +386,7 @@ class Discriminator(nn.Module):
     def transition_forward(self, x):
         size = x.size(2)
 
-        x_down = F.adaptive_avg_pool2d(x, (size//2, size//2))
+        x_down = F.avg_pool2d(x, 2)
         x_pre = self.rgb_layers[self.train_depth-1](x_down)
 
         x = self.rgb_layers[self.train_depth](x)
