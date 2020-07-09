@@ -386,7 +386,7 @@ class Discriminator(nn.Module):
     def transition_forward(self, x):
         size = x.size(2)
 
-        x_down = F.adaptive_avg_pool2d(x, (size//2, size//2))
+        x_down = F.avg_pool2d(x, 2)
         x_pre = self.rgb_layers[self.train_depth-1](x_down)
 
         x = self.rgb_layers[self.train_depth](x)
