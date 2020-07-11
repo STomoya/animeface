@@ -10,6 +10,8 @@ from WGAN_gp import main as wgan_gp_main
 from PGGAN import main as pggan_main
 from StyleGAN import main as stylegan_main
 
+from DiffAugment import main as da_main
+
 from pix2pix import main as pix2pix_main
 
 def main():
@@ -30,7 +32,7 @@ def main():
     #     to_loader
     # )
 
-    stylegan_main(
+    da_main(
         AnimeFaceDataset,
         to_loader
     )
