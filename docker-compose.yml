@@ -16,3 +16,4 @@ services:
             - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
         working_dir: /usr/src
         tty: true
+        shm_size: '2gb'
