@@ -4,6 +4,8 @@ from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 
 from .DiffAugment_pytorch import DiffAugment
 
+from .fp16 import network_to_half
+
 from torch.utils.data import DataLoader
 
 def to_loader(
