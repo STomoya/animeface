@@ -1,4 +1,10 @@
 
+'''
+TODO: train the model
+        This model takes too much memory and time to train.
+        I will train the model when I have time or more computational power...
+'''
+
 import itertools
 
 import torch
