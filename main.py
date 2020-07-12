@@ -13,6 +13,7 @@ from StyleGAN import main as stylegan_main
 from DiffAugment import main as da_main
 
 from pix2pix import main as pix2pix_main
+from UGATIT import main as ugatit_main
 
 def main():
     # image_size = 128
@@ -27,15 +28,15 @@ def main():
     #     image_size=image_size
     # )
 
-    # pix2pix_main(
-    #     GeneratePairImageDanbooruDataset,
-    #     to_loader
-    # )
-
-    da_main(
-        AnimeFaceDataset,
+    ugatit_main(
+        GeneratePairImageDanbooruDataset,
         to_loader
     )
+
+    # da_main(
+    #     AnimeFaceDataset,
+    #     to_loader
+    # )
 
 if __name__ == "__main__":
     main()
