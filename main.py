@@ -11,6 +11,8 @@ from PGGAN import main as pggan_main
 from StyleGAN import main as stylegan_main
 from StyleGAN2 import main as stylegan2_main
 
+from SinGAN import main as singan_main
+
 from DiffAugment import main as da_main
 
 from pix2pix import main as pix2pix_main
@@ -34,11 +36,13 @@ def main():
     #     to_loader
     # )
 
-    stylegan2_main(
-        AnimeFaceDataset,
-        to_loader,
-        DiffAugment
-    )
+    # stylegan2_main(
+    #     AnimeFaceDataset,
+    #     to_loader,
+    #     DiffAugment
+    # )
+
+    singan_main()
 
 if __name__ == "__main__":
     main()
