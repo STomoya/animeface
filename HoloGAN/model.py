@@ -200,15 +200,17 @@ class DBlock2d(nn.Module):
         super().__init__()
 
         self.snconv = SNConv2d(in_channels, out_channels, kernel_size, stride=stride, padding=padding, **kwargs)
-        self.norm = nn.InstanceNorm2d(out_channels, affine=True, track_running_stats=True)
+        self.norm = nn.InstanceNorm2d(out_channels, affine=True)
         self.linear = nn.Linear(out_channels, 1)
         self.activation = get_activation(activation, False, 0.2)
 
-        self.snconv.conv.weight.data.normal_(1, 0.02)
+        self.snconv.conv.weight.data.normal_(0, 0.02)
         if not self.snconv.conv.bias == None:
             self.snconv.conv.bias.data.fill_(0.)
-        self.linear.weight.data.normal_(1., 0.02)
+        self.linear.weight.data.normal_(0, 0.02)
         self.linear.bias.data.fill_(0.)
+        self.norm.weight.data.normal_(1.0, 0.02)
+        self.norm.bias.data.fill_(0.)
 
     def forward(self, x):
         x = self.snconv(x)
