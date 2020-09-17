@@ -10,6 +10,8 @@ import numpy as np
 from .config import *
 from .model import Generator, Discriminator
 
+from ..general import AnimeFaceDataset, to_loader
+
 class Step:
     '''
     manage training phases
@@ -210,18 +212,14 @@ def calc_gradient_penalty(real_image, D, phase):
     gradients = (gradients ** 2).sum(dim=1).mean()
     return gradients / 2
 
-def main(
-    dataset_class,
-    to_loader
-):
-
+def main():
     latent_dim = 512
     # params for wgan_gp
     gp_lambda = 10
     drift_epsilon = 0.001
 
     # add function for updating transform
-    class AnimeFaceDatasetAlpha(dataset_class):
+    class AnimeFaceDatasetAlpha(AnimeFaceDataset):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
         def update_transform(self, resolution):

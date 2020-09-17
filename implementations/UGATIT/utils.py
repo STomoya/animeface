@@ -14,6 +14,8 @@ from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
 
+from ..general import GeneratePairImageDanbooruDataset, to_loader
+
 def train(
     epochs,
     dataset,
@@ -184,10 +186,7 @@ class SoftMozaic(object):
         sample = sample.filter(ImageFilter.GaussianBlur(self.radius))
         return sample.resize([int(x / self.linear_scale) for x in sample.size]).resize(sample.size)
 
-def main(
-    dataset_class,
-    to_loader
-):
+def main():
     import torchvision.transforms as T
 
     epochs = 5
@@ -198,7 +197,7 @@ def main(
 
     pair_trasform = SoftMozaic(1.3, 0.4)
 
-    dataset = dataset_class(pair_trasform, image_size=128)
+    dataset = GeneratePairImageDanbooruDataset(pair_trasform, image_size=128)
     dataset.co_transform_head = T.Compose([
         T.CenterCrop((350, 350)),
         T.Resize(128)

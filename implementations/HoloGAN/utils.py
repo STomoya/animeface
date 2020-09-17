@@ -7,6 +7,7 @@ import numpy as np
 from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
+from ..general import AnimeFaceDataset, to_loader, DiffAugment
 
 def gen_theta(
     num_gen, minmax_angles=[0, 0, 220, 320, 0, 0],
@@ -197,9 +198,7 @@ def style_criterion(fake_logits, real_logits, style_lambda=1.):
 def identity_criterion(z, z_reconstruct, identity_lambda=1):
     return identity_lambda * ((z_reconstruct - z) ** 2).mean()
 
-def main(
-    DatasetClass, to_loader, DiffAugment
-):
+def main():
     # parameters
     # data
     image_size = 128
@@ -224,7 +223,7 @@ def main(
     eval_size = 10
 
 
-    dataset = DatasetClass(image_size)
+    dataset = AnimeFaceDataset(image_size)
     dataset = to_loader(dataset, batch_size)
 
     G = Generator(g_channels, noise_channels, activation)
