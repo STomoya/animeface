@@ -153,7 +153,7 @@ def train(
 
             if batches_done % save_interval == 0:
                 image_grid = make_grid(A, A2B, B, n_image=999)
-                save_image(image_grid, './UGATIT/result/{}.png'.format(batches_done), nrow=9, normalize=True)
+                save_image(image_grid, './implementations/UGATIT/result/{}.png'.format(batches_done), nrow=9, normalize=True)
                 
             batches_done += 1
 

@@ -184,7 +184,7 @@ def train(
             # save sample images
             if batches_done % save_interval == 0 or batches_done == 1:
                 test_img = G(const_noise, const_theta)
-                save_image(test_img, './HoloGAN/result/{}.png'.format(batches_done), nrow=10, normalize=True, range=(-1, 1))
+                save_image(test_img, './implementations/HoloGAN/result/{}.png'.format(batches_done), nrow=10, normalize=True, range=(-1, 1))
 
 
 def style_criterion(fake_logits, real_logits, style_lambda=1.):

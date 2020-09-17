@@ -1,12 +1,12 @@
 new:
-	mkdir ${name}
-	mkdir ${name}/result
-	touch ${name}/__init__.py
-	touch ${name}/model.py
-	touch ${name}/utils.py
+	mkdir implementations/${name}
+	mkdir implementations/${name}/result
+	touch implementations/${name}/__init__.py
+	touch implementations/${name}/model.py
+	touch implementations/${name}/utils.py
 
 del:
-	rm -r ${name}
+	rm -r implementations/${name}
 
 run:
 	docker-compose run --rm python python main.py

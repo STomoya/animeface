@@ -99,7 +99,7 @@ def train(
             if batches_done % save_interval == 0:
                 num_images = 32
                 images = grid(pair, gen_image, target, num_images)
-                save_image(images, "pix2pix/result/%d.png" % batches_done, nrow=4*3, normalize=True)
+                save_image(images, "implementations/pix2pix/result/%d.png" % batches_done, nrow=4*3, normalize=True)
 
     return losses
 
@@ -136,7 +136,7 @@ def plot_loss(losses):
     plt.xlabel('n_iter')
     plt.ylabel('loss')
 
-    plt.savefig('/usr/src/pix2pix/curve.png')
+    plt.savefig('/usr/src/implementations/pix2pix/curve.png')
 
 from PIL import ImageFilter
 

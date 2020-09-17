@@ -64,7 +64,7 @@ def train(
             
             fake_image.view(fake_image.size(0), -1)
             if batches_done % save_interval == 0 or batches_done == 1:
-                save_image(fake_image.data[:25], "WGAN_gp/result/%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(fake_image.data[:25], "implementations/WGAN_gp/result/%d.png" % batches_done, nrow=5, normalize=True)
 
 def gradient_penalty(D, real_image, fake_image, device):
     alpha = torch.from_numpy(np.random.random((real_image.size(0), 1, 1, 1)))

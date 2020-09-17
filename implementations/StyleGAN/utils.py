@@ -10,8 +10,6 @@ import numpy as np
 from .config import *
 from .model import Generator, Discriminator
 
-from .DiffAugment_pytorch import DiffAugment
-
 class Step:
     '''
     manage training phases
@@ -105,7 +103,6 @@ def train_wgangp(
     drift_epsilon,
     dataset,
     to_loader,
-    policy,
     device,
     verbose_interval=1000,
     save_interval=1000
@@ -139,19 +136,16 @@ def train_wgangp(
             z = torch.from_numpy(z).type(Tensor).to(device)
 
             image = image.type(Tensor).to(device)
+
             # generate image
             fake_image = G(z, G_mode)
-
-            # DiffAugment
-            image    = DiffAugment(image, policy=policy)
-            aug_fake = DiffAugment(fake_image, policy=policy)
 
             '''
             Train Discriminator
             '''
 
             real_prob = D(image, D_mode)
-            fake_prob = D(aug_fake.detach(), D_mode)
+            fake_prob = D(fake_image.detach(), D_mode)
             gp = calc_gradient_penalty(image.detach(), D, D_mode)
             drift = real_prob.square().mean()
             d_loss = softplus(-real_prob).mean() + softplus(fake_prob).mean() + (gp_lambda * gp) + (drift_epsilon * drift)
@@ -164,7 +158,7 @@ def train_wgangp(
             Train Generator
             '''
 
-            fake_prob = D(aug_fake, D_mode)
+            fake_prob = D(fake_image, D_mode)
             g_loss = softplus(-fake_prob).mean()
 
             optimizer_G.zero_grad()
@@ -186,7 +180,7 @@ def train_wgangp(
                 print('{:10} {:14} G LOSS : {:.5f}, D LOSS {:.5f}'.format(batches_done, training_status.current_phase, losses['G'][-1], losses['D'][-1]))
 
             if batches_done % save_interval == 0:
-                save_image(fake_image, './DiffAugment/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
+                save_image(fake_image, './implementations/StyleGAN/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
 
             batches_done += 1
 
@@ -226,10 +220,6 @@ def main(
     gp_lambda = 10
     drift_epsilon = 0.001
 
-    # policy for DiffAugment
-    policy = 'color,translation,cutout'
-    # policy = 'color,translation'
-
     # add function for updating transform
     class AnimeFaceDatasetAlpha(dataset_class):
         def __init__(self, *args, **kwargs):
@@ -260,7 +250,6 @@ def main(
         drift_epsilon=drift_epsilon,
         dataset=dataset,
         to_loader=to_loader,
-        policy=policy,
         device=device,
         # verbose_interval=1
     )
