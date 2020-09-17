@@ -15,7 +15,7 @@ deep models for [anime-face-dataset](https://github.com/Mckinsey666/Anime-Face-D
     [paper](https://arxiv.org/abs/1511.06434)
 - generative adversarial networks (GAN).  
     [paper](https://arxiv.org/abs/1406.2661)
-- Hologram(?) GAN (HoloGAN).
+- Hologram(?) GAN (HoloGAN).  
     [paper](https://arxiv.org/abs/1904.01326) | [code](https://github.com/thunguyenphuoc/HoloGAN)
 - progressive growing of GANs (PGGAN).  
     [paper](https://arxiv.org/abs/1710.10196) | [code](https://github.com/tkarras/progressive_growing_of_gans)

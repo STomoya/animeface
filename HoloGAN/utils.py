@@ -9,7 +9,7 @@ from torchvision.utils import save_image
 from .model import Generator, Discriminator
 
 def gen_theta(
-    num_gen, minmax_angles=[0, 0, -30, 30, 0, 0],
+    num_gen, minmax_angles=[0, 0, 220, 320, 0, 0],
     random = True
 ):
     '''
@@ -20,20 +20,20 @@ def gen_theta(
         LICENSE : https://github.com/christopher-beckham/hologan-pytorch/blob/master/LICENSE
     modified by STomoya (https://github.com/STomoya)
     '''
-    def radius(deg):
+    def radian(deg):
         return deg * (np.pi / 180)
     angles = {
-        'x_min' : radius(minmax_angles[0]),
-        'x_max' : radius(minmax_angles[1]),
-        'y_min' : radius(minmax_angles[2]),
-        'y_max' : radius(minmax_angles[3]),
-        'z_min' : radius(minmax_angles[4]),
-        'z_max' : radius(minmax_angles[5])
+        'x_min' : radian(minmax_angles[0]),
+        'x_max' : radian(minmax_angles[1]),
+        'y_min' : radian(minmax_angles[2]),
+        'y_max' : radian(minmax_angles[3]),
+        'z_min' : radian(minmax_angles[4]),
+        'z_max' : radian(minmax_angles[5])
     }
 
     samples = []
     if random:
-        # generate random angles (radius)
+        # generate random angles (radian)
         for _ in range(num_gen):
             samples.append(
                 [
@@ -184,7 +184,7 @@ def train(
             # save sample images
             if batches_done % save_interval == 0 or batches_done == 1:
                 test_img = G(const_noise, const_theta)
-                save_image(test_img, './HoloGAN/result/{}.png'.format(batches_done), nrow=5, normalize=True, range=(-1, 1))
+                save_image(test_img, './HoloGAN/result/{}.png'.format(batches_done), nrow=10, normalize=True, range=(-1, 1))
 
 
 def style_criterion(fake_logits, real_logits, style_lambda=1.):
@@ -203,7 +203,7 @@ def main(
     # parameters
     # data
     image_size = 128
-    batch_size = 20
+    batch_size = 32
 
     # model
     g_channels = 512
@@ -221,7 +221,7 @@ def main(
     identity_lambda = 1.
 
     # eval
-    eval_size = 25
+    eval_size = 10
 
 
     dataset = DatasetClass(image_size)
