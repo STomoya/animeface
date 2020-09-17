@@ -106,7 +106,7 @@ def train(
                 G_ema.eval()
                 with torch.no_grad():
                     gen_image = G_ema(constant_latent, injection=7)
-                save_image(gen_image, './StyleGAN2/result/{}.png'.format(batches_done), nrow=6, normalize=True, range=(-1, 1))
+                save_image(gen_image, './implementations/StyleGAN2/result/{}.png'.format(batches_done), nrow=6, normalize=True, range=(-1, 1))
 
 
             batches_done += 1

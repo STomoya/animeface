@@ -186,7 +186,7 @@ def train_wgangp(
                 print('{:10} {:14} G LOSS : {:.5f}, D LOSS {:.5f}'.format(batches_done, training_status.current_phase, losses['G'][-1], losses['D'][-1]))
 
             if batches_done % save_interval == 0:
-                save_image(fake_image, './DiffAugment/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
+                save_image(fake_image, './implementations/DiffAugment/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
 
             batches_done += 1
 

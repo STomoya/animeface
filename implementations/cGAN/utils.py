@@ -71,7 +71,7 @@ def train(
             
             fake_image.view(fake_image.size(0), -1)
             if batches_done % save_interval == 0:
-                save_image(fake_image.data[:25], "cGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
+                save_image(fake_image.data[:25], "implementations/cGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
 def main(
     dataset,
