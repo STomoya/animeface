@@ -7,6 +7,8 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
+from ..general import AnimeFaceDataset, to_loader
+
 def train(
     epochs,
     n_critic,
@@ -68,15 +70,17 @@ def train(
             if batches_done % save_interval == 0 or batches_done == 1:
                 save_image(fake_image.data[:25], "implementations/WGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
-def main(
-    dataset,
-    image_size,
-):
+def main():
+    batch_size = 32
+    image_size = 128
     epochs = 150
     latent_dim = 200
     lr = 5.e-5
     n_critic = 5
     clip_value = 0.01
+
+    dataset = AnimeFaceDataset(image_size)
+    dataset = to_loader(dataset, batch_size)
 
     G = Generator(latent_dim=latent_dim)
     D = Discriminator()

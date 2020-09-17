@@ -8,6 +8,8 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
+from ..general import AnimeFaceDataset, to_loader
+
 def train(
     epochs,
     n_critic,
@@ -89,16 +91,18 @@ def gradient_penalty(D, real_image, fake_image, device):
 
     return penalty
 
-def main(
-    dataset,
-    image_size,
-):
+def main():
+    batch_size = 32
+    image_size = 128
     epochs = 150
     latent_dim = 200
     lr = 2.e-4
     betas = (0.5, 0.999)
     n_critic = 5
     gp_gamma = 10
+
+    dataset = AnimeFaceDataset(image_size)
+    dataset = to_loader(dataset, batch_size)
 
     G = Generator(latent_dim=latent_dim)
     D = Discriminator()

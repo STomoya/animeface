@@ -7,6 +7,8 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
+from ..general import GeneratePairImageDanbooruDataset, to_loader
+
 def train(
     epochs,
     dataset,
@@ -177,7 +179,7 @@ def main(
     batch_size = 32
 
     pair_transform = Mozaic(linear_scale=2)
-    dataset = dataset_class(pair_transform=pair_transform, image_size=256)
+    dataset = GeneratePairImageDanbooruDataset(pair_transform=pair_transform, image_size=256)
     dataset = to_loader(dataset, batch_size)
 
     G = Generator()

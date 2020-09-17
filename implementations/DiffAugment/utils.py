@@ -12,6 +12,8 @@ from .model import Generator, Discriminator
 
 from .DiffAugment_pytorch import DiffAugment
 
+from ..general import AnimeFaceDataset, to_loader
+
 class Step:
     '''
     manage training phases
@@ -216,10 +218,7 @@ def calc_gradient_penalty(real_image, D, phase):
     gradients = (gradients ** 2).sum(dim=1).mean()
     return gradients / 2
 
-def main(
-    dataset_class,
-    to_loader
-):
+def main():
 
     latent_dim = 512
     # params for wgan_gp
@@ -231,7 +230,7 @@ def main(
     # policy = 'color,translation'
 
     # add function for updating transform
-    class AnimeFaceDatasetAlpha(dataset_class):
+    class AnimeFaceDatasetAlpha(AnimeFaceDataset):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
         def update_transform(self, resolution):

@@ -7,6 +7,8 @@ from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
 
+from ..general import AnimeFaceDataset, to_loader, DiffAugment
+
 def toggle_grad(model, state):
     for param in model.parameters():
         param.requires_grad = state
@@ -122,11 +124,7 @@ def calc_gradient_penalty(real_image, D):
     gradients = (gradients ** 2).sum(dim=1).mean()
     return gradients / 2
 
-def main(
-    dataset_class,
-    to_loader,
-    diffaug
-):
+def main():
 
     epochs = 100
     lr = 0.001
@@ -141,7 +139,7 @@ def main(
 
     policy = 'color,translation'
 
-    dataset = dataset_class(image_size=128)
+    dataset = AnimeFaceDataset(image_size=128)
     dataset = to_loader(dataset, batch_size)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -162,5 +160,5 @@ def main(
 
     train(
         epochs, latent_dim, G, G_ema, D, optimizer_G, optimizer_D, gp_lambda, drift_epsilon,
-        dataset, num_images, diffaug, policy, device, 1000, 1000
+        dataset, num_images, DiffAugment, policy, device, 1000, 1000
     )

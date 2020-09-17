@@ -7,6 +7,8 @@ import numpy as np
 
 from .model import Generator, Discriminator
 
+from ..general import AnimeFaceDataset, to_loader
+
 def train(
     epochs,
     dataset,
@@ -68,12 +70,14 @@ def train(
             if batches_done % save_interval == 0:
                 save_image(fake_image.data[:25], "implementations/GAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
-def main(
-    dataset,
-    image_size,
-):
+def main():
+    batch_size = 32
+    image_size = 128
     epochs = 10
     latent_dim = 100
+
+    dataset = AnimeFaceDataset(image_size)
+    dataset = to_loader(dataset, batch_size)
 
     G = Generator(latent_dim=latent_dim, image_shape=(3, image_size, image_size))
     D = Discriminator(image_shape=(3, image_size, image_size))
