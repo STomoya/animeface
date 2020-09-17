@@ -1,7 +1,20 @@
 
 # animeface
 
-deep models for [anime-face-dataset](https://github.com/Mckinsey666/Anime-Face-Dataset), and [Tagged Anime Illustrations](https://www.kaggle.com/mylesoneill/tagged-anime-illustrations)
+deep models for anime images.
+
+## Datasets
+
+- [anime-face-dataset](https://www.kaggle.com/splcher/animefacedataset)  
+    Anime faces collected from [Getchu.com](http://www.getchu.com/).  
+    Based on [Mckinsey666](https://github.com/Mckinsey666/Anime-Face-Dataset)'s dataset.  
+    63.6K images.
+- [Tagged Anime Illustrations](https://www.kaggle.com/mylesoneill/tagged-anime-illustrations)  
+    A subset of the [Danbooru2017](https://www.gwern.net/Danbooru2017), and the [moeimouto face dataset](http://www.nurs.or.jp/~nagadomi/animeface-character-dataset/).  
+    337K Danbooru images, 17.4K moeimouto face images.
+- [Danbooru2019 Portraits](https://www.gwern.net/Crops#danbooru2019-portraits) [1]  
+    Portraits of anime characters collected from [Danbooru2019](https://www.gwern.net/Danbooru2019).  
+    302K portraits.
 
 ## Models
 
@@ -42,6 +55,14 @@ deep models for [anime-face-dataset](https://github.com/Mckinsey666/Anime-Face-D
     [paper](https://arxiv.org/abs/2006.10738) | [code](https://github.com/mit-han-lab/data-efficient-gans)
 - pixel shuffle.  
     [paper](https://arxiv.org/abs/1609.05158)
+
+## Reference
+
+```
+[1] Gwern Branwen, Anonymous, & The Danbooru Community;
+    “Danbooru2019 Portraits: A Large-Scale Anime Head Illustration Dataset”, 2019-03-12. Web. Accessed 2020/09/17
+    https://www.gwern.net/Crops#danbooru2019-portraits
+```
 
 ## Author
 
