@@ -56,7 +56,7 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1704.00028)
 - zero-centered gradient penalty.  
     [paper](https://arxiv.org/abs/1705.09367)
-- simplified zero-centered gradient penality.
+- simplified zero-centered gradient penality.  
     [paper](https://arxiv.org/abs/1801.04406) | [code](https://github.com/LMescheder/GAN_stability)
 
 ### Other
