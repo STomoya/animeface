@@ -1,6 +1,7 @@
 
 from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
+from .danbooru_portrait import DanbooruPortraitDataset
 
 from .DiffAugment_pytorch import DiffAugment
 
