@@ -18,7 +18,8 @@ class DanbooruPortraitDataset(Dataset):
             self.transform = transform
         else:
             self.transform = T.Compose([
-                T.Resize((image_size, image_size)),
+                T.Resize(int(image_size*1.3)),
+                T.CenterCrop(image_size),
                 T.RandomHorizontalFlip(),
                 T.ToTensor(),
                 T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
