@@ -3,8 +3,6 @@ from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeled
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 from .danbooru_portrait import DanbooruPortraitDataset
 
-from .DiffAugment_pytorch import DiffAugment
-
 from .fp16 import network_to_half
 
 from torch.utils.data import DataLoader
