@@ -1,4 +1,8 @@
 
+<p align="center">
+    <img alt="StyleGAN2 result" src="https://raw.githubusercontent.com/STomoya/animeface/master/implementations/StyleGAN2/result/118000.png">
+</p>
+
 # animeface
 
 deep models for anime images.
@@ -18,6 +22,8 @@ deep models for anime images.
 
 ## Models
 
+"code" is indicated when only an official implementation exists.
+
 ### Generative Adversarial Networks (GANs)
 
 - auxiliary classifier GAN (ACGAN).  
@@ -26,6 +32,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1411.1784)
 - deep convolutional GAN (DCGAN).  
     [paper](https://arxiv.org/abs/1511.06434)
+- deep regret analytic GAN (DRAGAN).  
+    [paper](https://arxiv.org/abs/1705.07215) | [code](https://github.com/kodalinaveen3/DRAGAN)
 - generative adversarial networks (GAN).  
     [paper](https://arxiv.org/abs/1406.2661)
 - Hologram(?) GAN (HoloGAN).  
@@ -46,8 +54,10 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1701.07875)
 - WGAN with gradient penalty (WGAN_gp).  
     [paper](https://arxiv.org/abs/1704.00028)
-- WGAN with zero-centered gradient penalty (WGAN_gp).  
-    [paper](https://openreview.net/forum?id=ByxPYjC5KQ)
+- zero-centered gradient penalty.  
+    [paper](https://arxiv.org/abs/1705.09367)
+- simplified zero-centered gradient penality.  
+    [paper](https://arxiv.org/abs/1801.04406) | [code](https://github.com/LMescheder/GAN_stability)
 
 ### Other
 
