@@ -7,7 +7,8 @@ import numpy as np
 from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
-from ..general import AnimeFaceDataset, to_loader, DiffAugment
+from ..general import AnimeFaceDataset, to_loader
+from ..gan_utils import DiffAugment
 
 def gen_theta(
     num_gen, minmax_angles=[0, 0, 220, 320, 0, 0],

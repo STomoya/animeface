@@ -7,7 +7,8 @@ from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
 
-from ..general import AnimeFaceDataset, to_loader, DiffAugment
+from ..general import AnimeFaceDataset, to_loader
+from ..gan_utils import DiffAugment
 
 def toggle_grad(model, state):
     for param in model.parameters():
