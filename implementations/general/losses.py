@@ -131,7 +131,7 @@ class WGANLoss(AdversarialLoss):
 class HingeLoss(AdversarialLoss):
     '''hinge loss'''
     def __init__(self, *args, **kwargs):
-        super.__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.relu = nn.ReLU()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = - E[min(0, 1 + D(x))] - E[min(0, -1 - D(G(z)))]'''
@@ -223,7 +223,7 @@ class GPRegularization(Loss):
             grad_outputs=ones,
             create_graph=True,
             retain_graph=True,
-            only_input=True
+            only_inputs=True
         )[0]
         gradients = gradients.view(gradients.size(0), -1)
         penalty = (gradients.norm(2, dim=1) - self.center).pow(2).mean()
@@ -265,7 +265,7 @@ class GPRegularization(Loss):
                 grad_outputs=ones,
                 create_graph=True,
                 retain_graph=True,
-                only_input=True
+                only_inputs=True
             )[0]
             gradients = gradients.view(gradients.size(0), -1)
             penalty = gradients.norm(2, dim=1).pow(2).mean()
@@ -274,15 +274,15 @@ class GPRegularization(Loss):
         r1_penalty, r2_penalty = 0, 0
         # R1 regularization
         if not real_image == None:
-            loc_real = Variable(real_image, requires_grad_=True)
+            loc_real = Variable(real_image, requires_grad=True)
             real_prob = D(loc_real).sum()
             r1_penalty = calc_gp(real_prob, loc_real)
             r1_penalty = r1_penalty * self.lambda_ * 0.5
         # R2 regularization
         if not fake_image == None:
-            loc_fake = Variable(fake_image, requires_grad_=True)
+            loc_fake = Variable(fake_image, requires_grad=True)
             fake_prob = D(loc_fake).sum()
-            r2_penalty = calc_gp(fake_prob, fake_image)
+            r2_penalty = calc_gp(fake_prob, loc_fake)
             r2_penalty = r2_penalty * self.lambda_ * 0.5
         
         penalty = r1_penalty + r2_penalty
@@ -293,4 +293,59 @@ class GPRegularization(Loss):
         if self.return_all:
             return penalty, r1_penalty, r2_penalty
         return penalty
-        
+
+if __name__ == "__main__":
+    '''TEST'''
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+
+    class Flatten(nn.Module):
+        def forward(self, x):
+            return x.view(x.size(0), -1)
+
+    G = nn.Sequential(
+        nn.Conv2d(64, 32, 3, padding=1),
+        nn.ReLU(),
+        nn.Upsample(scale_factor=2),
+        nn.Conv2d(32, 3, 3, padding=1),
+        nn.Tanh()
+    )
+    D = nn.Sequential(
+        nn.Conv2d(3, 32, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(32, 64, 3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(64, 1, 3, stride=2, padding=1),
+        Flatten()
+    )
+    z = torch.randn(3, 64, 4, 4)
+    x = torch.randn(3,  3, 8, 8)
+    # print(D(G(z)).size())
+
+    for gan_loss in [GANLoss, LSGANLoss, WGANLoss, HingeLoss]:
+        loss = gan_loss()
+        for reg_type in GPRegularization.supported_types:
+            print(gan_loss.__name__, reg_type)
+            reg = GPRegularization(reg_type)
+
+            # D(x)
+            real_prob = D(x)
+            # D(G(z))
+            fake = G(z)
+            fake_prob = D(fake.detach())
+            # gan loss
+            adv_loss = loss.d_loss(real_prob, fake_prob)
+            # regularization
+            reg_loss = reg.calc_regularization(D, x, fake)
+
+            d_loss = adv_loss + reg_loss
+            d_loss.backward()
+
+            # D(G(z))
+            fake = G(z)
+            fake_prob = D(fake)
+            # gan loss
+            g_loss = loss.g_loss(fake_prob)
+
+            g_loss.backward()
