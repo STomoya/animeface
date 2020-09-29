@@ -8,3 +8,4 @@ chainer
 illustration2vec
 scikit-image
 scipy
+git+https://github.com/kornia/kornia
