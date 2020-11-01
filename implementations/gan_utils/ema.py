@@ -38,34 +38,13 @@ class EMA:
 
         # update params
         ema_param = dict(self.G_ema.named_parameters())
-        run_param = dict(G.named_parameters())
+        run_param = dict(model_running.named_parameters())
 
         for key in ema_param.keys():
             ema_param[key].data.mul_(self.decay).add_(run_param[key], alpha=(1-self.decay))
 
         # running model to original device
         model_running.to(original_device)
-
-    def __call__(self, *args, **kwargs):
-        '''return the model's output
-        
-        args
-            inputs to the model.
-            args can be on gpu.
-        '''
-        # move inputs to cpu before input
-        cpu_args, cpu_kwargs = [], {}
-        for arg in args:
-            if isinstance(arg, torch.Tensor):
-                arg = arg.cpu()
-            cpu_args.append(arg)
-        for key, value in kwargs:
-            if isinstance(value, torch.Tensor):
-                value = value.cpu()
-            cpu_kwargs[key] = value
-        
-        with torch.no_grad():
-            return self.G_ema(*cpu_args, **cpu_kwargs)
 
 if __name__ == "__main__":
     from utils import get_device

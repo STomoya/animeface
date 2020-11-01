@@ -83,7 +83,7 @@ class GANTrainingStatus:
         plt.savefig(filename)
         plt.close()
 
-    def save_image(self, folder, G, *input, filename=None, nrow=5, normalize=True, range=(-1, 1)):
+    def save_image(self, folder, G, *input, ema=False, filename=None, nrow=5, normalize=True, range=(-1, 1)):
         '''simple save image
         save_image func with
         sampling images, and only args that I use frequently
@@ -91,11 +91,12 @@ class GANTrainingStatus:
         G.eval()
         with torch.no_grad():
             images = G(*input)
-        G.train()
+        if not ema:
+            G.train()
 
         if filename == None:
             filename = '{}.png'.format(self.batches_done)
-        
+
         tv.utils.save_image(
             images, os.path.join(folder, filename), nrow=nrow, normalize=normalize, range=range
         )
