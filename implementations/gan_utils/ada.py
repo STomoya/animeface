@@ -10,6 +10,9 @@
 
 The 'upfirdn2d_native' does not use torch.utils.cpp_extension,
 making it slower than the original code. (couldn't fix the errors...)
+
+Added a class that holds the current p and also updates the p with rt heuristic.
+Supports constant p if p is specified when calling AdaAugment object.
 '''
 
 """
@@ -479,12 +482,36 @@ def random_apply_color(img, p, C=None):
 
     return img, C
 
+class AdaAugment:
+    def __init__(self, target, length, device, update_on=None, heuristic='rt'):
+        assert target >= 0 and target <= 1., 'target must be between 0 and 1'
+        assert heuristic == 'rt', 'right now this class only supports \'rt\''
+        self.update_on = update_on
+        self.target = target
+        self.step = target / length
+        self.p = 0.0
+        self.track = torch.tensor([0, 0], device=device)
 
-def AdaAugment(img, p, transform_matrix=(None, None)):
-    img, G = random_apply_affine(img, p, transform_matrix[0])
-    img, C = random_apply_color(img, p, transform_matrix[1])
+    def update_p(self, real_prob):
+        if self.update_on == None:
+            self.update_on = real_prob.size(0) * 4 - 1
+        self.track[0] += torch.sign(real_prob).sum()
+        self.track[1] += real_prob.size(0)
+        if self.track[1] > self.update_on:
+            stat = self.track[0] / self.track[1]
+            self.p += self.step * torch.sign(stat - self.target)
+            self.p = min(1, max(0, self.p))
+            self.track.mul_(0.)
 
-    return img, (G, C)
+    def __call__(self, img, const_p=None, transform_matrix=(None, None)):
+        if const_p:
+            p = const_p
+        else:
+            p = self.p
+        img, G = random_apply_affine(img, p, transform_matrix[0])
+        img, C = random_apply_color(img, p, transform_matrix[1])
+
+        return img, (G, C)
 
 if __name__ == "__main__":
     import time
