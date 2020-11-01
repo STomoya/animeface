@@ -11,6 +11,7 @@ from implementations.PGGAN import main as pggan_main
 from implementations.StyleGAN import main as stylegan_main
 from implementations.StyleGAN2 import main as stylegan2_main
 from implementations.HoloGAN import main as hologan_main
+from implementations.BigGAN import main as biggan_main
 
 # image manipulation
 from implementations.SinGAN import main as singan_main
@@ -30,7 +31,7 @@ from implementations.pixelshuffle import main as pixelshuffle_main
 
 
 def main():
-    hologan_main()
+    biggan_main()
 
 if __name__ == "__main__":
     main()
