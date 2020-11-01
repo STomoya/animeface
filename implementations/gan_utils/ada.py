@@ -8,15 +8,7 @@
 
 [modified by] : STomoya (https://github.com/STomoya)
 
-the original code from StudioGAN does not include augmentation on image space.
-I added
-- random RGB noise
-- random cutout (code from DiffAugment)
-
-This still does not include
-- random image space filtering
-
-Also the 'upfirdn2d_native' does not use torch.utils.cpp_extension,
+The 'upfirdn2d_native' does not use torch.utils.cpp_extension,
 making it slower than the original code. (couldn't fix the errors...)
 '''
 
@@ -446,7 +438,8 @@ def random_apply_affine(img, p, G=None, antialiasing_kernel=SYM6):
         [(w_o + 2 * p_ux1) / w_p - 1, (h_o + 2 * p_uy1) / h_p - 1], device=grid.device
     )
     # [modification] for amp.autocast
-    grid = grid.type(img_2x.dtype)
+    if not grid.dtype == img_2x.dtype:
+        grid = grid.type(img_2x.dtype)
     # [modification end]
 
     img_affine = F.grid_sample(
@@ -466,42 +459,6 @@ def random_apply_affine(img, p, G=None, antialiasing_kernel=SYM6):
     img = img_down[:, :, pad_y1:end_y, pad_x1:end_x]
 
     return img, G
-
-def rand_rgb_noise(x, p):
-    # original
-    size = x.size()
-    
-    sigma = normal_sample(size[0], 0, 0.1).abs()
-    disable_value = torch.empty(size[0]).fill_(0)
-    condition = (torch.empty(size[0]).uniform_(0, 1) < p)
-    sigma = torch.where(condition, sigma, disable_value).view(size[0], 1, 1, 1)
-
-    noise = (normal_sample(size, 0, 1) * sigma).type(x.dtype).to(x.device)
-    
-    return x + noise
-
-def rand_cutout(x, p,ratio=0.5):
-    '''this code is from DiffAugment'''
-    cutout_size = int(x.size(2) * ratio + 0.5), int(x.size(3) * ratio + 0.5)
-    offset_x = torch.randint(0, x.size(2) + (1 - cutout_size[0] % 2), size=[x.size(0), 1, 1], device=x.device)
-    offset_y = torch.randint(0, x.size(3) + (1 - cutout_size[1] % 2), size=[x.size(0), 1, 1], device=x.device)
-    grid_batch, grid_x, grid_y = torch.meshgrid(
-        torch.arange(x.size(0), dtype=torch.long, device=x.device),
-        torch.arange(cutout_size[0], dtype=torch.long, device=x.device),
-        torch.arange(cutout_size[1], dtype=torch.long, device=x.device),
-    )
-    grid_x = torch.clamp(grid_x + offset_x - cutout_size[0] // 2, min=0, max=x.size(2) - 1)
-    grid_y = torch.clamp(grid_y + offset_y - cutout_size[1] // 2, min=0, max=x.size(3) - 1)
-    mask = torch.ones(x.size(0), x.size(2), x.size(3), dtype=x.dtype, device=x.device)
-    mask[grid_batch, grid_x, grid_y] = 0
-    # [modification] to perform cutout with probability p
-    mask_size = tuple(mask.size())
-    disable_value = torch.empty(mask_size, dtype=x.dtype, device=x.device).fill_(1)
-    condition = (torch.empty(mask_size[0], dtype=x.dtype, device=x.device).uniform_(0, 1) < p).view(mask_size[0], 1, 1).expand(*mask_size)
-    mask = torch.where(condition, mask, disable_value)
-    # [modification end]
-    x = x * mask.unsqueeze(1)
-    return x.contiguous() # added contiguous to avoid memory format error
 
 def apply_color(img, mat):
     batch = img.shape[0]
@@ -526,8 +483,6 @@ def random_apply_color(img, p, C=None):
 def AdaAugment(img, p, transform_matrix=(None, None)):
     img, G = random_apply_affine(img, p, transform_matrix[0])
     img, C = random_apply_color(img, p, transform_matrix[1])
-    img = rand_rgb_noise(img, p)
-    img = rand_cutout(img, p)
 
     return img, (G, C)
 
