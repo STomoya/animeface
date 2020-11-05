@@ -5,6 +5,8 @@ import warnings
 import torch
 import torchvision as tv
 
+from PIL import Image
+
 # device specification
 def get_device(): return torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -120,7 +122,11 @@ class GANTrainingStatus:
                 )
         return '\t'.join(partial_msg)
         
-
+def gif_from_files(image_paths, filename='out.gif', optimize=False, duration=500, loop=0):
+    images = []
+    for path in image_paths:
+        images.append(Image.open(str(path)))
+    images[0].save(filename, save_all=True, append_images=images[1:], optimize=optimize, duration=duration, loop=loop)
 
 if __name__ == "__main__":
     '''TEST'''
