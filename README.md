@@ -28,6 +28,8 @@ deep models for anime images.
 
 - auxiliary classifier GAN (ACGAN).  
     [paper](https://arxiv.org/abs/1610.09585)
+- big GAN (BigGAN).  
+    [paper](https://arxiv.org/abs/1809.11096) | [code](https://github.com/ajbrock/BigGAN-PyTorch)
 - conditional GAN (cGAN).  
     [paper](https://arxiv.org/abs/1411.1784)
 - deep convolutional GAN (DCGAN).  
@@ -61,6 +63,8 @@ deep models for anime images.
 
 ### Other
 
+- Adaptive Discriminator Augmentation (ADA).  
+    [paper](https://arxiv.org/abs/2006.06676) | [code](https://github.com/NVlabs/stylegan2-ada)
 - differentiable augmentation (DiffAugment).  
     [paper](https://arxiv.org/abs/2006.10738) | [code](https://github.com/mit-han-lab/data-efficient-gans)
 - pixel shuffle.  

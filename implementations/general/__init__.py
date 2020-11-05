@@ -11,7 +11,8 @@ def to_loader(
     dataset,
     batch_size,
     shuffle=True,
-    num_workers=8
+    num_workers=8,
+    use_gpu=True
 ):
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=use_gpu)
     return loader
