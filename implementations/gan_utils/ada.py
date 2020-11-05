@@ -42,6 +42,7 @@ SOFTWARE.
 
 import math
 
+import numpy as np
 import torch
 from torch.nn import functional as F
 
@@ -490,18 +491,19 @@ class AdaAugment:
         self.target = target
         self.step = target / length
         self.p = 0.0
-        self.track = torch.tensor([0, 0], device=device)
+        self.sign_sum = 0.
+        self.num_images = 0
 
     def update_p(self, real_prob):
         if self.update_on == None:
             self.update_on = real_prob.size(0) * 4 - 1
-        self.track[0] += torch.sign(real_prob).sum()
-        self.track[1] += real_prob.size(0)
-        if self.track[1] > self.update_on:
-            stat = self.track[0] / self.track[1]
-            self.p += self.step * torch.sign(stat - self.target)
+        self.sign_sum += torch.sign(real_prob).sum().item()
+        self.num_images += real_prob.size(0)
+        if self.num_images > self.update_on:
+            stat = self.sign_sum / self.num_images
+            self.p += self.step * self.num_images * np.sign(stat - self.target)
             self.p = min(1, max(0, self.p))
-            self.track.mul_(0.)
+            self.sign_sum, self.num_images = 0., 0
 
     def __call__(self, img, const_p=None, transform_matrix=(None, None)):
         if const_p:
@@ -511,7 +513,7 @@ class AdaAugment:
         img, G = random_apply_affine(img, p, transform_matrix[0])
         img, C = random_apply_color(img, p, transform_matrix[1])
 
-        return img, (G, C)
+        return img
 
 if __name__ == "__main__":
     import time
