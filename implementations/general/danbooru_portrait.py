@@ -37,7 +37,7 @@ class DanbooruPortraitDataset(Dataset):
         return image
     
     def _load(self):
-        base = Path('/usr/src/data/danbooru/portraits')
+        base = Path('/usr/src/data/danbooru/portraits/portraits')
         image_paths = base.glob('*.jpg')
         image_paths = [str(path) for path in image_paths]
         return image_paths
@@ -45,7 +45,10 @@ class DanbooruPortraitDataset(Dataset):
 if __name__ == "__main__":
     dataset = DanbooruPortraitDataset(128)
     from torch.utils.data import DataLoader
-    dataset = DataLoader(dataset, batch_size=9, shuffle=True)
+    print(len(dataset))
+    dataset = DataLoader(dataset, batch_size=32, shuffle=True)
+    print(len(dataset))
+    exit()
 
     from torchvision.utils import save_image
     for image in dataset:
