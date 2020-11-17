@@ -1,6 +1,7 @@
 
 import csv
 from pathlib import Path
+import glob
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -40,6 +41,34 @@ class AnimeFaceDataset(Dataset):
         base = Path('/usr/src/data/animefacedataset/images')
         image_paths = base.glob('*')
         image_paths = [str(path) for path in image_paths]
+        return image_paths
+
+class YearAnimeFaceDataset(Dataset):
+    def __init__(self, image_size, min_year=2005):
+        self.image_paths = self._load(min_year)
+        self.length = len(self.image_paths)
+        self.transform = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+        ])
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        image_path = self.image_paths[index]
+
+        image = Image.open(image_path).convert('RGB')
+        image = self.transform(image)
+
+        return image
+
+    def _load(self, min_year):
+        image_paths = glob.glob('/usr/src/data/animefacedataset/images/*')
+        year_from_path = lambda x: int(x.split('/')[-1].split('.')[0].split('_')[-1])
+        image_paths = [path for path in image_paths if year_from_path(path) >= min_year]
         return image_paths
 
 class LabeledAnimeFaceDataset(Dataset):
@@ -173,6 +202,8 @@ if __name__ == "__main__":
     ):
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
         return loader
+
+    dataset = YearAnimeFaceDataset(100)
 
     dataset = AnimeFaceDataset(100)
     dataset = to_loader(dataset, 32)
