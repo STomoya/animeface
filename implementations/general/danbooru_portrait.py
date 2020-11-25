@@ -18,7 +18,7 @@ class DanbooruPortraitDataset(Dataset):
             self.transform = transform
         else:
             self.transform = T.Compose([
-                T.Resize(int(image_size*1.3)),
+                T.Resize(int(image_size*1.2)),
                 T.CenterCrop(image_size),
                 T.RandomHorizontalFlip(),
                 T.ToTensor(),
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     print(len(dataset))
     dataset = DataLoader(dataset, batch_size=32, shuffle=True)
     print(len(dataset))
-    exit()
+    # exit()
 
     from torchvision.utils import save_image
     for image in dataset:
