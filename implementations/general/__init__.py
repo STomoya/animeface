@@ -1,5 +1,5 @@
 
-from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset
+from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 from .danbooru_portrait import DanbooruPortraitDataset
 
