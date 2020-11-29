@@ -29,9 +29,11 @@ from implementations.DiffAugment import main as da_main
 # upsampling
 from implementations.pixelshuffle import main as pixelshuffle_main
 
+'''Auto Encoders'''
+from implementations.AE import main as ae_main
 
 def main():
-    biggan_main()
+    ae_main()
 
 if __name__ == "__main__":
     main()
