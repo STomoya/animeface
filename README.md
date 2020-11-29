@@ -61,6 +61,11 @@ deep models for anime images.
 - simplified zero-centered gradient penality.  
     [paper](https://arxiv.org/abs/1801.04406) | [code](https://github.com/LMescheder/GAN_stability)
 
+### Auto Encoders
+
+- Auto Encoder (AE)  
+    [paper](https://www.cs.toronto.edu/~hinton/science.pdf)
+
 ### Other
 
 - Adaptive Discriminator Augmentation (ADA).  
