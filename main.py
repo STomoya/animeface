@@ -24,6 +24,8 @@ from implementations.ACGAN import main as acgan_main
 from implementations.pix2pix import main as pix2pix_main
 from implementations.UGATIT import main as ugatit_main
 
+# optimizer
+from implementations.AdaBelief import main as adabelief_main
 # augmentation
 from implementations.DiffAugment import main as da_main
 # upsampling
@@ -33,7 +35,7 @@ from implementations.pixelshuffle import main as pixelshuffle_main
 from implementations.AE import main as ae_main
 
 def main():
-    ae_main()
+    adabelief_main()
 
 if __name__ == "__main__":
     main()
