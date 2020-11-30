@@ -68,6 +68,8 @@ deep models for anime images.
 
 ### Other
 
+- AdaBelief optimizer  
+    [paper](https://arxiv.org/abs/2010.07468) | [code](https://github.com/juntang-zhuang/Adabelief-Optimizer)
 - Adaptive Discriminator Augmentation (ADA).  
     [paper](https://arxiv.org/abs/2006.06676) | [code](https://github.com/NVlabs/stylegan2-ada)
 - differentiable augmentation (DiffAugment).  
@@ -79,7 +81,8 @@ deep models for anime images.
 
 ```
 [1] Gwern Branwen, Anonymous, & The Danbooru Community;
-    “Danbooru2019 Portraits: A Large-Scale Anime Head Illustration Dataset”, 2019-03-12. Web. Accessed 2020/09/17
+    “Danbooru2019 Portraits: A Large-Scale Anime Head Illustration Dataset”,
+    2019-03-12. Web. Accessed 2020/09/17,
     https://www.gwern.net/Crops#danbooru2019-portraits
 ```
 
