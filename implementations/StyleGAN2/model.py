@@ -91,7 +91,7 @@ class InjectNoise(nn.Module):
 class ModulatedConv2d(nn.Module):
     def __init__(self,
         in_channels, out_channels, style_dim, kernel_size,
-        stride=1, demod=True
+        stride=1, demod=True, gain=1.
     ):
         super().__init__()
         self.out_channels = out_channels
@@ -102,6 +102,7 @@ class ModulatedConv2d(nn.Module):
         self.affine = Linear('elr', style_dim, in_channels)
         self.weight = nn.Parameter(torch.empty(out_channels, in_channels, kernel_size, kernel_size))
         self.bias = nn.Parameter(torch.empty(1, out_channels, 1, 1))
+        self.coef = gain / (self.weight[0].numel() ** 0.5)
     def forward(self, x, y):
         B, _, H, W = x.size()
 
@@ -111,7 +112,7 @@ class ModulatedConv2d(nn.Module):
                                # for init weights with .apply()
 
         # modulate
-        weight = self.weight[None, :, :, :, :] * y[:, None, :, None, None]
+        weight = self.weight[None, :, :, :, :] * y[:, None, :, None, None] * self.coef
 
         # demodulate
         if self.demod:
