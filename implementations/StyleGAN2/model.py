@@ -353,7 +353,7 @@ class Generator(nn.Module):
         
         input = self.const.expand(B, -1, -1, -1)
         image = self.synthesis(input, style, injection)
-        return image
+        return image, style
 
     def init_weight(self, map_init_func, syn_init_func):
         self.map.apply(map_init_func)
