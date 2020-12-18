@@ -1,165 +1,263 @@
 
+import os
+import functools
+import warnings
+
 import torch
 import torch.nn as nn
-from torch.autograd import grad, Variable
 import torch.optim as optim
-from torchvision.utils import save_image
+from torch.autograd import grad, Variable
+from torch.cuda.amp import autocast, GradScaler
+import numpy as np
+from tqdm import tqdm
 
-from .model import Generator, Discriminator
+from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
+from ..gan_utils import sample_nnoise, get_device, GANTrainingStatus, DiffAugment
+from ..gan_utils.losses import GANLoss
 
-from ..general import AnimeFaceDataset, to_loader
-from ..gan_utils import DiffAugment
+from .model import Generator, Discriminator, init_weight_N01
 
-def toggle_grad(model, state):
-    for param in model.parameters():
-        param.requires_grad = state
+def clac_grad(outputs, inputs, scaler=None):
+    with autocast(False):
+        if scaler is not None:
+            outputs = scaler.scale(outputs)
+        ones = torch.ones(outputs.size(), device=inputs.device)
+        gradients = grad(
+            outputs=outputs, inputs=inputs, grad_outputs=ones,
+            create_graph=True, retain_graph=True, only_inputs=True)[0]
+        if scaler is not None:
+            gradients = gradients / scaler.get_scale()
+    return gradients
 
-def update_ema(model_ema, model, decay=0.999):
-    toggle_grad(model, False)
+def r1_penalty(real, D, scaler=None):
+    '''R1 regularizer'''
+    real_loc = Variable(real, requires_grad=True)
+    real_prob = D(real_loc)
+    real_prob = real_prob.sum()
 
-    param_ema = dict(model_ema.named_parameters())
-    param     = dict(model.named_parameters())
+    gradients = clac_grad(real_prob, real_loc, scaler)
 
-    for key in param_ema.keys():
-        param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
+    # calc penalty
+    gradients = gradients.reshape(gradients.size(0), -1)
+    penalty = gradients.norm(2, dim=1).pow(2).mean()
 
-    toggle_grad(model, True)
+    return penalty / 2
+
+def pl_penalty(styles, images, pl_mean, scaler=None):
+    '''path length regularizer'''
+    # mul noise
+    num_pixels = images.size()[2:].numel()
+    noise = torch.randn(images.size(), device=images.device) / np.sqrt(num_pixels)
+    outputs = (images * noise).sum()
+
+    gradients = clac_grad(outputs, styles, scaler)
+
+    # calc penalty
+    gradients = gradients.pow(2).sum(dim=1).sqrt()
+    return (gradients - pl_mean).pow(2).mean()
+
+def update_pl_mean(old, new, decay=0.99):
+    '''exponential moving average'''
+    return decay * old + (1 - decay) * new
+
+def update_ema(G, G_ema, decay=0.999):
+    G.eval()
+
+    with torch.no_grad():
+        param_ema = dict(G_ema.named_parameters())
+        param     = dict(G.named_parameters())
+        for key in param_ema.keys():
+            param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
+
+    G.train()
 
 def train(
-    epochs,
-    latent_dim,
-    G,
-    G_ema,
-    D,
-    optimizer_G,
-    optimizer_D,
-    gp_lambda,
-    drift_epsilon,
-    dataset,
-    num_images,
-    diffaug,
-    policy,
-    device,
-    verbose_interval=1000,
-    save_interval=1000
+    max_iter, dataset, sampler, const_z,
+    G, G_ema, D, optimizer_G, optimizer_D,
+    r1_lambda, pl_lambda, d_k, g_k, policy,
+    device, amp,
+    save=1000
 ):
+    
+    status  = GANTrainingStatus()
+    pl_mean = 0.
+    loss    = GANLoss()
+    bar     = tqdm(total=max_iter)
+    scaler  = GradScaler() if amp else None
+    augment = functools.partial(DiffAugment, policy=policy)
 
-    Tensor = torch.FloatTensor
-    softplus = nn.Softplus()
+    if G_ema is not None:
+        G_ema.eval()
 
-    losses = {
-        'D' : [],
-        'G' : []
-    }
-
-    batches_done = 0
-
-    constant_latent = torch.randn(2, num_images, latent_dim).type(Tensor).to(device)
-    constant_latent = constant_latent.unbind(0)
-
-    for epoch in range(epochs):
-        for index, image in enumerate(dataset):
-
-            z = torch.randn(2, image.size(0), latent_dim).type(Tensor).to(device)
-            z = z.unbind(0)
-
-            image = image.type(Tensor).to(device)
-
-            # gen image
-            gen_image_ = G(z)
-
-            image     = diffaug(image, policy)
-            gen_image = diffaug(gen_image_, policy)
-
-            '''
-            Train Discriminator
-            '''
-
-            real_prob = D(image)
-            fake_prob = D(gen_image.detach())
-            gp = calc_gradient_penalty(image.detach(), D)
-            drift = real_prob.square().mean()
-            d_loss = softplus(-real_prob).mean() + softplus(fake_prob).mean() + (gp_lambda * gp) + (drift_epsilon * drift)
-
-            optimizer_D.zero_grad()
-            d_loss.backward()
-            optimizer_D.step()
-
-            '''
-            Train Generator
-            '''
-
-            fake_prob = D(gen_image)
-            g_loss = softplus(-fake_prob).mean()
-
+    while status.batches_done < max_iter:
+        for index, real in enumerate(dataset):
             optimizer_G.zero_grad()
-            g_loss.backward()
-            optimizer_G.step()
+            optimizer_D.zero_grad()
 
-            # EMA
-            update_ema(G_ema, G)
+            real = real.to(device)
 
-            losses['G'].append(g_loss.item())
-            losses['D'].append(d_loss.item())
+            '''discriminator'''
+            z = sampler()
+            with autocast(amp):
+                # D(x)
+                real_aug = augment(real)
+                real_prob = D(real_aug)
+                # D(G(z))
+                fake, _ = G(z)
+                fake_aug = augment(fake)
+                fake_prob = D(fake_aug.detach())
+                # loss
+                if status.batches_done % d_k == 0 \
+                    and r1_lambda > 0 \
+                    and status.batches_done is not 0:
+                    # lazy regularization
+                    r1 = r1_penalty(real, D, scaler)
+                    D_loss = r1 * r1_lambda * d_k
+                else:
+                    # gan loss on other iter
+                    D_loss = loss.d_loss(real_prob, fake_prob)
+            
+            if scaler is not None:
+                scaler.scale(D_loss).backward()
+                scaler.step(optimizer_D)
+            else:
+                D_loss.backward()
+                optimizer_D.step()
 
+            '''generator'''
+            z = sampler()
+            with autocast(amp):
+                # D(G(z))
+                fake, style = G(z)
+                fake_aug = augment(fake)
+                fake_prob = D(fake_aug)
+                # loss
+                if status.batches_done % g_k == 0 \
+                    and pl_lambda > 0 \
+                    and status.batches_done is not 0:
+                    # lazy regularization
+                    pl = pl_penalty(style, fake, pl_mean, scaler)
+                    G_loss = pl * pl_lambda * g_k
+                    avg_pl = np.mean(pl.detach().cpu().numpy())
+                    pl_mean = update_pl_mean(pl_mean, avg_pl)
+                else:
+                    # gan loss on other iter
+                    G_loss = loss.g_loss(fake_prob)
+            
+            if scaler is not None:
+                scaler.scale(G_loss).backward()
+                scaler.step(optimizer_G)
+            else:
+                G_loss.backward()
+                optimizer_G.step()
 
-            if batches_done % verbose_interval == 0:
-                print('{:8} G LOSS : {:.5f}, D LOSS : {:.5f}'.format(batches_done, losses['G'][-1], losses['D'][-1]))
-            if batches_done % save_interval == 0:
-                G_ema.eval()
+            if G_ema is not None:
+                update_ema(G, G_ema)
+
+            # save
+            if status.batches_done % save == 0:
                 with torch.no_grad():
-                    gen_image = G_ema(constant_latent, injection=7)
-                save_image(gen_image, './implementations/StyleGAN2/result/{}.png'.format(batches_done), nrow=6, normalize=True, range=(-1, 1))
+                    images, _ = G_ema(const_z)
+                status.save_image('implementations/StyleGAN2/result', images, nrow=4)
+                torch.save(G_ema.state_dict(), f'implementations/StyleGAN2/result/G_{status.batches_done}.pt')
 
-
-            batches_done += 1
-
-def calc_gradient_penalty(real_image, D):
-    loc_real_image = Variable(real_image, requires_grad=True)
-    gradients = grad(
-        outputs=D(loc_real_image)[:, 0].sum(),
-        inputs=loc_real_image,
-        create_graph=True, retain_graph=True
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    gradients = (gradients ** 2).sum(dim=1).mean()
-    return gradients / 2
+            # updates
+            G_loss_pyfloat, D_loss_pyfloat = G_loss.item(), D_loss.item()
+            status.append(G_loss_pyfloat, D_loss_pyfloat)
+            bar.set_postfix_str(f'G : {G_loss_pyfloat:.5f} D : {D_loss_pyfloat:.5f}')
+            bar.update(1)
+            if scaler is not None: scaler.update()
 
 def main():
 
-    epochs = 100
+    # params
+    # data
+    image_size = 128
+    min_year = 2010
+    image_channels = 3
+    batch_size = 32
+
+    # model
+    # G
+    style_dim = 512
+    channels = 32
+    max_channels = 512
+    block_num_conv = 2
+    map_num_layers = 8
+    map_lr = 0.01
+    # D
+    mbsd_groups = 4
+
+    # traning
+    max_iter = -1 # if minus 100 epochs
     lr = 0.001
-    betas = (0, 0.99)
-
-    batch_size = 10
-    num_images = 30
-
-    latent_dim = 512
-    gp_lambda = 10
-    drift_epsilon = 0.001
-
+    betas = (0., 0.99)
+    g_k = 8  # calc pl every g_k iter
+    d_k = 16 # calc gp every d_k iter
+    r1_lambda = 10.
+    pl_lambda = 0.
     policy = 'color,translation'
+    amp = True
 
-    dataset = AnimeFaceDataset(image_size=128)
-    dataset = to_loader(dataset, batch_size)
+    device = get_device()
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    # dataset
+    dataset = YearAnimeFaceDataset(image_size, min_year)
+    dataset = to_loader(
+                dataset, batch_size, shuffle=True,
+                num_workers=os.cpu_count(), use_gpu=torch.cuda.is_available())
 
-    G = Generator()
-    G_ema = Generator()
-    toggle_grad(G_ema, False)
-    D = Discriminator()
+    # random noise sampler
+    sampler = functools.partial(sample_nnoise, (batch_size, style_dim), device=device)
+    # const input for eval
+    const_z = sample_nnoise((16, style_dim), device=device)
+
+    # models
+    G = Generator(
+            image_size, image_channels, style_dim, channels, max_channels,
+            block_num_conv, map_num_layers, map_lr)
+    G_ema = Generator(
+            image_size, image_channels, style_dim, channels, max_channels,
+            block_num_conv, map_num_layers, map_lr)
+    D = Discriminator(
+            image_size, image_channels, channels, max_channels, 
+            block_num_conv, mbsd_groups)
+    ## init
+    G.init_weight(
+        map_init_func=functools.partial(init_weight_N01, lr=map_lr),
+        syn_init_func=init_weight_N01)
+    G_ema.eval()
+    update_ema(G, G_ema, decay=0)
+    D.apply(init_weight_N01)
 
     G.to(device)
     G_ema.to(device)
     D.to(device)
 
-    update_ema(G_ema, G, decay=0.)
+    # optimizer
+    if pl_lambda > 0:
+        g_ratio = g_k / (g_k + 1)
+        g_lr = lr * g_ratio
+        g_betas = (betas[0]**g_ratio, betas[1]**g_ratio)
+    else: g_lr, g_betas = lr, betas
 
-    optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=betas)
+    if r1_lambda > 0:
+        d_ratio = d_k / (d_k + 1)
+        d_lr = lr * d_ratio
+        d_betas = (betas[0]**d_ratio, betas[1]**d_ratio)
+    else: d_lr, d_betas = lr, betas
+    
+    optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=g_betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=d_betas)
+
+    if max_iter < 0:
+        max_iter = len(dataset) * 100
 
     train(
-        epochs, latent_dim, G, G_ema, D, optimizer_G, optimizer_D, gp_lambda, drift_epsilon,
-        dataset, num_images, DiffAugment, policy, device, 1000, 1000
+        max_iter, dataset, sampler, const_z,
+        G, G_ema, D, optimizer_G, optimizer_D,
+        r1_lambda, pl_lambda, d_k, g_k,
+        policy, device, amp, 1000
     )
+
+    
