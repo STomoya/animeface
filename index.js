@@ -19,7 +19,7 @@ var app = new Vue({
             ],
             [
                 {name: "StyleGAN", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/StyleGAN/result/155000.png"},
-                {name: "StyleGAN2", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/StyleGAN2/result/118000.png"},
+                {name: "StyleGAN2", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/StyleGAN2/result/108000.png"},
                 {name: "StyleGAN2 + DiffAugment", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/DiffAugment/result/238000.png"}
             ],
             [
