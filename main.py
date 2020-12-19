@@ -35,7 +35,7 @@ from implementations.pixelshuffle import main as pixelshuffle_main
 from implementations.AE import main as ae_main
 
 def main():
-    adabelief_main()
+    stylegan2_main()
 
 if __name__ == "__main__":
     main()
