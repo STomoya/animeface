@@ -110,17 +110,24 @@ class Training:
             image = fin.read()
         return base64.b64encode(image).decode('utf-8')
 
+class Wave():
+    def __init__(self, name, max_iters, num_loss=2, gpu=True):
+        self._system_stat = SystemStat(name, gpu)
+        self._system_stat.start()
+        self._training = Training(max_iters, num_loss, name)
+
+        self.update = self._training.update
+        self.stop = self._system_stat.stop
+
 if __name__ == "__main__":
     import math
-    system = SystemStat()
-    system.start()
-    train = Training(100)
+    stat = Wave('monitor', 100)
     for i in range(100):
         loss = {
             'G' : math.sin(i/10),
             'D' : math.cos(i/10)
         }
-        train.update(i, loss)
+        stat.update(i, loss)
         time.sleep(0.2)
-    system.stop()
+    stat.stop()
 
