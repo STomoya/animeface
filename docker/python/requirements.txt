@@ -1,12 +1,14 @@
 torch
+torchvision
 torch-summary
 scikit-learn
-torchvision
+scikit-image
 pillow
 matplotlib
 tqdm
 chainer
 illustration2vec
-scikit-image
 scipy
+h2o_wave
+psutil
 git+https://github.com/kornia/kornia
