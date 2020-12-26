@@ -268,9 +268,10 @@ class Mapping(nn.Module):
 
         layers = []
         for _ in range(num_layers):
-            layers.append(
-                MapLinear(style_dim, style_dim, lr=lr)
-            )
+            layers.extend([
+                MapLinear(style_dim, style_dim, lr=lr),
+                nn.LeakyReLU(0.2, inplace=True)
+            ])
         self.map = nn.Sequential(*layers)
 
     def forward(self, x):
