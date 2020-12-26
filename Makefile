@@ -9,4 +9,7 @@ del:
 	rm -r implementations/${name}
 
 run:
+	docker-compose -f no-wave-image.yml run --rm python python main.py
+
+run_wave:
 	docker-compose run --rm python python main.py
