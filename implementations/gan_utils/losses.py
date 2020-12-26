@@ -206,7 +206,7 @@ class GradPenalty(Loss):
 
         d_x_hat = D(x_hat)
         
-        gradients = _calc_grad(d_x_hat, x_hat, scaler)
+        gradients = self._calc_grad(d_x_hat, x_hat, scaler)
 
         gradients = gradients.reshape(gradients.size(0), -1)
         penalty = (gradients.norm(2, dim=1) - center).pow(2).mean()
@@ -230,14 +230,14 @@ class GradPenalty(Loss):
 
         device = real.device
 
-        alpha = torch.rand((real.size(0), 1), device=device)
+        alpha = torch.rand((real.size(0), 1, 1, 1), device=device).expand(real.size())
         beta = torch.rand(real.size(), device=device)
         x_hat = real * alpha + (1 - alpha) * (real + 0.5 * real.std() * beta)
         x_hat = Variable(x_hat, requires_grad=True)
 
         d_x_hat = D(x_hat)
 
-        gradients = _calc_grad(d_x_hat, x_hat, scaler)
+        gradients = self._calc_grad(d_x_hat, x_hat, scaler)
 
         gradients = gradients.reshape(gradients.size(0), -1)
         penalty = (gradients.norm(2, dim=1) - center).pow(2).mean()
@@ -261,7 +261,7 @@ class GradPenalty(Loss):
         real_loc = Variable(real, requires_grad=True)
         d_real_loc = D(real_loc)
 
-        gradients = _calc_grad(d_real_loc, real_loc, scaler)
+        gradients = self._calc_grad(d_real_loc, real_loc, scaler)
 
         gradients = gradients.reshape(gradients.size(0), -1)
         penalty = gradients.norm(2, dim=1).pow(2).mean() / 2.
