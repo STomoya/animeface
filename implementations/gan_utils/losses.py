@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import grad, Variable
 
 
@@ -50,13 +51,10 @@ Adversarial Loss
 
 class GANLoss(AdversarialLoss):
     '''original GAN loss'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.softplus = nn.Softplus()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = E[log(D(x)) + log(1 - D(G(z)))]'''
-        real_loss = self.softplus(- real_prob).mean()
-        fake_loss = self.softplus(  fake_prob).mean()
+        real_loss = F.softplus(- real_prob).mean()
+        fake_loss = F.softplus(  fake_prob).mean()
 
         adv_loss = real_loss + fake_loss
 
@@ -68,7 +66,7 @@ class GANLoss(AdversarialLoss):
         return adv_loss
     def g_loss(self, fake_prob):
         '''Lg = E[log(D(G(z)))]'''
-        fake_loss = self.softplus(- fake_prob).mean()
+        fake_loss = F.softplus(- fake_prob).mean()
 
         if self.backward:
             fake_loss.backward(retain_graph=True)
@@ -78,13 +76,10 @@ class GANLoss(AdversarialLoss):
 
 class LSGANLoss(AdversarialLoss):
     '''lsgan loss (a,b,c = 0,1,1)'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.criterion = nn.MSELoss()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = 1/2*E[(D(x) - 1)^2] + 1/2*E[D(G(z))^2]'''
-        real_loss = self.criterion(real_prob, torch.ones(real_prob.size(), device=real_prob.device))
-        fake_loss = self.criterion(fake_prob, torch.zeros(fake_prob.size(), device=fake_prob.device))
+        real_loss = F.mse_loss(real_prob, torch.ones(real_prob.size(), device=real_prob.device))
+        fake_loss = F.mse_loss(fake_prob, torch.zeros(fake_prob.size(), device=fake_prob.device))
 
         adv_loss = (real_loss + fake_loss) / 2
 
@@ -96,7 +91,7 @@ class LSGANLoss(AdversarialLoss):
         return adv_loss
     def g_loss(self, fake_prob):
         '''Lg = 1/2*E[(D(G(z)) - 1)^2]'''
-        fake_loss = self.criterion(fake_prob, torch.ones(fake_prob.size(), device=fake_prob.device))
+        fake_loss = F.mse_loss(fake_prob, torch.ones(fake_prob.size(), device=fake_prob.device))
         fake_loss = fake_loss / 2
 
         if self.backward:
@@ -130,13 +125,10 @@ class WGANLoss(AdversarialLoss):
 
 class HingeLoss(AdversarialLoss):
     '''hinge loss'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.relu = nn.ReLU()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = - E[min(0, 1 + D(x))] - E[min(0, -1 - D(G(z)))]'''
-        real_loss = self.relu(1. - real_prob).mean()
-        fake_loss = self.relu(1. + fake_prob).mean()
+        real_loss = F.relu(1. - real_prob).mean()
+        fake_loss = F.relu(1. + fake_prob).mean()
 
         adv_loss = real_loss + fake_loss
 
