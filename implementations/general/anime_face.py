@@ -23,7 +23,7 @@ class AnimeFaceDataset(Dataset):
             transforms.Resize((image_size, image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize(0.5, 0.5)
         ])
 
     def __len__(self):
@@ -51,7 +51,7 @@ class YearAnimeFaceDataset(Dataset):
             transforms.Resize((image_size, image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize(0.5, 0.5)
         ])
 
     def __len__(self):
@@ -70,6 +70,28 @@ class YearAnimeFaceDataset(Dataset):
         year_from_path = lambda x: int(x.split('/')[-1].split('.')[0].split('_')[-1])
         image_paths = [path for path in image_paths if year_from_path(path) >= min_year]
         return image_paths
+
+class XDoGAnimeFaceDataset(YearAnimeFaceDataset):
+    def __init__(self, image_size, min_year=2005):
+        super.__init__(image_size, min_year)
+        self.xdog_paths = [path.replace('images', 'xdog'), for path in self.image_paths]
+        self.transform = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            # no random flip for pair images
+            transforms.ToTensor(),
+            transforms.Normalize(0.5, 0.5)
+        ])
+    def __getitem__(self, index):
+        rgb_image_path = self.image_paths[index]
+        xdog_image_path = self.xdog_paths[index]
+
+        rgb_image = Image.open(rgb_image_path).convert('RGB')
+        xdog_image = Image.open(xdog_image_path).convert('L')
+
+        rgb_image = self.transform(rgb_image)
+        xdog_image = self.transform(xdog_image)
+
+        return rgb_image, xdog_image
 
 class LabeledAnimeFaceDataset(Dataset):
     '''
@@ -92,7 +114,7 @@ class LabeledAnimeFaceDataset(Dataset):
             transforms.Resize((image_size, image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize(0.5, 0.5)
         ])
 
     def __len__(self):
@@ -149,7 +171,7 @@ class OneHotLabeledAnimeFaceDataset(Dataset):
             transforms.Resize((image_size, image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+            transforms.Normalize(0.5, 0.5)
         ])
 
     def __len__(self):
