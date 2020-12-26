@@ -1,7 +1,9 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import grad, Variable
+from torch.cuda.amp import autocast, GradScaler
 
 
 '''
@@ -50,13 +52,10 @@ Adversarial Loss
 
 class GANLoss(AdversarialLoss):
     '''original GAN loss'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.softplus = nn.Softplus()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = E[log(D(x)) + log(1 - D(G(z)))]'''
-        real_loss = self.softplus(- real_prob).mean()
-        fake_loss = self.softplus(  fake_prob).mean()
+        real_loss = F.softplus(- real_prob).mean()
+        fake_loss = F.softplus(  fake_prob).mean()
 
         adv_loss = real_loss + fake_loss
 
@@ -68,7 +67,7 @@ class GANLoss(AdversarialLoss):
         return adv_loss
     def g_loss(self, fake_prob):
         '''Lg = E[log(D(G(z)))]'''
-        fake_loss = self.softplus(- fake_prob).mean()
+        fake_loss = F.softplus(- fake_prob).mean()
 
         if self.backward:
             fake_loss.backward(retain_graph=True)
@@ -78,13 +77,10 @@ class GANLoss(AdversarialLoss):
 
 class LSGANLoss(AdversarialLoss):
     '''lsgan loss (a,b,c = 0,1,1)'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.criterion = nn.MSELoss()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = 1/2*E[(D(x) - 1)^2] + 1/2*E[D(G(z))^2]'''
-        real_loss = self.criterion(real_prob, torch.ones(real_prob.size(), device=real_prob.device))
-        fake_loss = self.criterion(fake_prob, torch.zeros(fake_prob.size(), device=fake_prob.device))
+        real_loss = F.mse_loss(real_prob, torch.ones(real_prob.size(), device=real_prob.device))
+        fake_loss = F.mse_loss(fake_prob, torch.zeros(fake_prob.size(), device=fake_prob.device))
 
         adv_loss = (real_loss + fake_loss) / 2
 
@@ -96,7 +92,7 @@ class LSGANLoss(AdversarialLoss):
         return adv_loss
     def g_loss(self, fake_prob):
         '''Lg = 1/2*E[(D(G(z)) - 1)^2]'''
-        fake_loss = self.criterion(fake_prob, torch.ones(fake_prob.size(), device=fake_prob.device))
+        fake_loss = F.mse_loss(fake_prob, torch.ones(fake_prob.size(), device=fake_prob.device))
         fake_loss = fake_loss / 2
 
         if self.backward:
@@ -130,13 +126,10 @@ class WGANLoss(AdversarialLoss):
 
 class HingeLoss(AdversarialLoss):
     '''hinge loss'''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.relu = nn.ReLU()
     def d_loss(self, real_prob, fake_prob):
         '''Ld = - E[min(0, 1 + D(x))] - E[min(0, -1 - D(G(z)))]'''
-        real_loss = self.relu(1. - real_prob).mean()
-        fake_loss = self.relu(1. + fake_prob).mean()
+        real_loss = F.relu(1. - real_prob).mean()
+        fake_loss = F.relu(1. + fake_prob).mean()
 
         adv_loss = real_loss + fake_loss
 
@@ -160,105 +153,22 @@ class HingeLoss(AdversarialLoss):
 Regularization
 '''
 
-class GPRegularization(Loss):
-    '''gradient penalty regularization'''
-    supported_types = ['gp', '0_gp', 'dragan', '0_simple']
-    def __init__(self, gp_type='gp', lambda_=10., *args, **kwargs):
-        '''
-        args
-            gp_type : str (default:'gp')
-                gradient penalty type.
-                in 'gp', 'gp_0', 'dragan', '0_simple'
-            lambda_ : float (default:10.)
-                lambda for gradient penalty
-        '''
-        super().__init__(*args, **kwargs)
-        assert gp_type in self.supported_types
-        self.gp_type = gp_type
-        self.center = 0 if '0' in gp_type else 1
-        self.lambda_ = lambda_
-
-        self.__assign_regularization()
-    
-    def __assign_regularization(self):
-        '''assign function by 'gp_type' '''
-        if self.gp_type in ['gp', '0_gp', 'dragan']:
-            self.calc_regularization = self.__calc_gradient_penalty
-        elif self.gp_type == '0_simple':
-            self.calc_regularization = self.__calc_simple_zero_center_gradient_penalty
-
-    def __calc_gradient_penalty(self, D, real_image, fake_image):
-        '''calculates gradient penalty for
-            1-GP, 0-GP, dragan
-
-            Lgp = lambda * E[(||grad(D(x^))|| - center)^2]
-
-            where
-            1-GP & 0-GP : x^ = alpha * x + (1 - alpha) * x~
-            dragan      : x^ = alpha * x + (1 - alpha) * (x + 0.5 * std(x) * U(0, 1))
-            when
-            x  : real samples
-            x~ : generated samples
+class GradPenalty(Loss):
+    def _calc_grad(self, outputs, inputs, scaler=None):
+        '''calculate gradients
 
         args
-            D : torch.nn.Module
-                discriminator
-            real_image : torch.Tensor
-                real image samples
-            fake_image : torch.Tensor
-                generated image samples
+            outputs: torch.Tensor
+                output tensor of a model
+            inputs: torch.Tensor
+                input tensor to a model
+            scaler: torch.cuda.amp.GradScaler (default: None)
+                gradient scaler if using torch.cuda.amp
         '''
-        alpha = torch.randn(real_image.size(0), 1, 1, 1, device=real_image.device)
-        if self.gp_type in ['gp', '0_gp']:
-            x_hat = (alpha * real_image + (1 - alpha) * fake_image).requires_grad_(True)
-        elif self.gp_type == 'dragan':
-            x_hat = (alpha * real_image + (1 - alpha) * (real_image + 0.5 * real_image.std() * torch.rand(real_image.size(), device=real_image.device))).requires_grad_(True)
-
-        d_x_hat = D(x_hat)
-        ones = torch.ones(d_x_hat.size(), device=d_x_hat.device).requires_grad_(False)
-
-        gradients = grad(
-            outputs=d_x_hat,
-            inputs=x_hat,
-            grad_outputs=ones,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True
-        )[0]
-        gradients = gradients.view(gradients.size(0), -1)
-        penalty = (gradients.norm(2, dim=1) - self.center).pow(2).mean()
-        penalty = penalty * self.lambda_
-        
-        if self.backward:
-            penalty.backward(retain_graph=True)
-        
-        return penalty
-
-    def __calc_simple_zero_center_gradient_penalty(self, D, real_image=None, fake_image=None):
-        '''calculates gradient penalty for
-            simple 0-GP
-
-            Lgp = lambda/2 * R1 + lambda/2 * R2
-
-            where
-            R1 = E[(||grad(D(x))||)^2]
-            R2 = E[(||grad(D(x~))||)^2]
-            when
-            x  : real samples
-            x~ : generated samples
-
-        args
-            D : torch.nn.Module
-                discriminator
-            real_image : torch.Tensor (default:None)
-                if set, R1 regularization is calculated
-            fake_image : torch.Tensor (default:None)
-                if set, R2 regularization is calculated
-        '''
-        
-        def calc_gp(outputs, inputs):
-            '''calc 0-GP'''
-            ones = torch.ones(real_prob.size(), device=real_prob.device).requires_grad_(False)
+        with autocast(False):
+            if isinstance(scaler, GradScaler):
+                outputs = scaler.scale(outputs)
+            ones = torch.ones(outputs.size(), device=outputs.device)
             gradients = grad(
                 outputs=outputs,
                 inputs=inputs,
@@ -267,85 +177,99 @@ class GPRegularization(Loss):
                 retain_graph=True,
                 only_inputs=True
             )[0]
-            gradients = gradients.view(gradients.size(0), -1)
-            penalty = gradients.norm(2, dim=1).pow(2).mean()
-            return penalty
+            if isinstance(scaler, GradScaler):
+                gradients = gradients / scaler.get_scale()
+        return gradients
 
-        r1_penalty, r2_penalty = 0, 0
-        # R1 regularization
-        if not real_image == None:
-            loc_real = Variable(real_image, requires_grad=True)
-            real_prob = D(loc_real).sum()
-            r1_penalty = calc_gp(real_prob, loc_real)
-            r1_penalty = r1_penalty * self.lambda_ * 0.5
-        # R2 regularization
-        if not fake_image == None:
-            loc_fake = Variable(fake_image, requires_grad=True)
-            fake_prob = D(loc_fake).sum()
-            r2_penalty = calc_gp(fake_prob, loc_fake)
-            r2_penalty = r2_penalty * self.lambda_ * 0.5
+    def gradient_penalty(self, real, fake, D, scaler=None, center=1.):
+        '''calculate gradient penalty (1 and 0 center)
+
+        args
+            real: torch.Tensor
+                batched tensor of real images
+            fake: torch.Tensor
+                generated image tensor
+            D: torch.nn.Module
+                discriminator to calculate the gradient for
+            scaler: torch.cuda.amp.GradScaler (default: None)
+                gradient scaler for torch.cuda.amp
+            center: Union[int, float] (default: 1.)
+                the center used the calculate the penalty
+        '''
+        assert center in [1., 0., 1, 0]
+
+        device = real.device
+
+        alpha = torch.rand(1, device=device)
+        x_hat = real * alpha + fake * (1 - alpha)
+        x_hat = Variable(x_hat, requires_grad=True)
+
+        d_x_hat = D(x_hat)
         
-        penalty = r1_penalty + r2_penalty
+        gradients = self._calc_grad(d_x_hat, x_hat, scaler)
+
+        gradients = gradients.reshape(gradients.size(0), -1)
+        penalty = (gradients.norm(2, dim=1) - center).pow(2).mean()
 
         if self.backward:
             penalty.backward(retain_graph=True)
 
-        if self.return_all:
-            return penalty, r1_penalty, r2_penalty
         return penalty
 
-if __name__ == "__main__":
-    '''TEST'''
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
+    def dragan_gradient_penalty(self, real, D, scaler=None):
+        '''DRAGAN gradient penalty
 
-    class Flatten(nn.Module):
-        def forward(self, x):
-            return x.view(x.size(0), -1)
+        args:
+            real: torch.Tensor
+                batched tensor of real images
+            D: torch.nn.Module
+                discriminator to calculate the gradient for
+            scaler: torch.cuda.amp.GradScaler (default: None)
+                gradient scaler for torch.cuda.amp
+        '''
 
-    G = nn.Sequential(
-        nn.Conv2d(64, 32, 3, padding=1),
-        nn.ReLU(),
-        nn.Upsample(scale_factor=2),
-        nn.Conv2d(32, 3, 3, padding=1),
-        nn.Tanh()
-    )
-    D = nn.Sequential(
-        nn.Conv2d(3, 32, 3, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(32, 64, 3, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(64, 1, 3, stride=2, padding=1),
-        Flatten()
-    )
-    z = torch.randn(3, 64, 4, 4)
-    x = torch.randn(3,  3, 8, 8)
-    # print(D(G(z)).size())
+        device = real.device
 
-    for gan_loss in [GANLoss, LSGANLoss, WGANLoss, HingeLoss]:
-        loss = gan_loss()
-        for reg_type in GPRegularization.supported_types:
-            print(gan_loss.__name__, reg_type)
-            reg = GPRegularization(reg_type)
+        alpha = torch.rand((real.size(0), 1, 1, 1), device=device).expand(real.size())
+        beta = torch.rand(real.size(), device=device)
+        x_hat = real * alpha + (1 - alpha) * (real + 0.5 * real.std() * beta)
+        x_hat = Variable(x_hat, requires_grad=True)
 
-            # D(x)
-            real_prob = D(x)
-            # D(G(z))
-            fake = G(z)
-            fake_prob = D(fake.detach())
-            # gan loss
-            adv_loss = loss.d_loss(real_prob, fake_prob)
-            # regularization
-            reg_loss = reg.calc_regularization(D, x, fake)
+        d_x_hat = D(x_hat)
 
-            d_loss = adv_loss + reg_loss
-            d_loss.backward()
+        gradients = self._calc_grad(d_x_hat, x_hat, scaler)
 
-            # D(G(z))
-            fake = G(z)
-            fake_prob = D(fake)
-            # gan loss
-            g_loss = loss.g_loss(fake_prob)
+        gradients = gradients.reshape(gradients.size(0), -1)
+        penalty = (gradients.norm(2, dim=1) - center).pow(2).mean()
 
-            g_loss.backward()
+        if self.backward:
+            penalty.backward(retain_graph=True)    
+
+        return penalty
+
+    def r1_regularizer(self, real, D, scaler=None):
+        '''R1 regularizer
+
+        args:
+            real: torch.Tensor
+                batched tensor of real images
+            D: torch.nn.Module
+                discriminator to calculate the gradient for
+            scaler: torch.cuda.amp.GradScaler (default: None)
+                gradient scaler for torch.cuda.amp
+        '''
+        real_loc = Variable(real, requires_grad=True)
+        d_real_loc = D(real_loc)
+
+        gradients = self._calc_grad(d_real_loc, real_loc, scaler)
+
+        gradients = gradients.reshape(gradients.size(0), -1)
+        penalty = gradients.norm(2, dim=1).pow(2).mean() / 2.
+
+        if self.backward:
+            penalty.backward(retain_graph=True)
+
+        return penalty
+
+    def r2_regularizer(self, fake, D, scaler=None):
+        return self.r1_regularizer(fake, D, scaler)
