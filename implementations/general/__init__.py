@@ -2,8 +2,7 @@
 from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 from .danbooru_portrait import DanbooruPortraitDataset
-
-from .fp16 import network_to_half
+from .utils import get_device, Status
 
 from torch.utils.data import DataLoader
 
