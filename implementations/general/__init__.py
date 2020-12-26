@@ -4,8 +4,6 @@ from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 from .danbooru_portrait import DanbooruPortraitDataset
 from .utils import get_device, Status
 
-from .fp16 import network_to_half
-
 from torch.utils.data import DataLoader
 
 def to_loader(
