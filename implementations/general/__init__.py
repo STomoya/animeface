@@ -1,7 +1,7 @@
 
-from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset
+from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset, XDoGAnimeFaceDataset
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
-from .danbooru_portrait import DanbooruPortraitDataset
+from .danbooru_portrait import DanbooruPortraitDataset, XDoGDanbooruPortraitDataset
 from .utils import get_device, Status
 
 from torch.utils.data import DataLoader
