@@ -44,6 +44,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1710.10196) | [code](https://github.com/tkarras/progressive_growing_of_gans)
 - pix2ix.  
     [paper](https://arxiv.org/abs/1703.10593) | [code](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)
+- pix2pix HD.  
+    [paper](https://arxiv.org/abs/1711.11585) | [code](https://github.com/NVIDIA/pix2pixHD)
 - single GAN (SinGAN).  
     [paper](https://arxiv.org/abs/1905.01164) | [code](https://github.com/tamarott/SinGAN)
 - style-based GAN (StyleGAN).  
