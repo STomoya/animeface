@@ -73,8 +73,8 @@ class YearAnimeFaceDataset(Dataset):
 
 class XDoGAnimeFaceDataset(YearAnimeFaceDataset):
     def __init__(self, image_size, min_year=2005):
-        super.__init__(image_size, min_year)
-        self.xdog_paths = [path.replace('images', 'xdog'), for path in self.image_paths]
+        super().__init__(image_size, min_year)
+        self.xdog_paths = [path.replace('images', 'xdog') for path in self.image_paths]
         self.transform = transforms.Compose([
             transforms.Resize((image_size, image_size)),
             # no random flip for pair images

@@ -22,6 +22,7 @@ from implementations.ACGAN import main as acgan_main
 
 # image-to-image translation
 from implementations.pix2pix import main as pix2pix_main
+from implementations.pix2pixHD import main as pix2pixhd_main
 from implementations.UGATIT import main as ugatit_main
 
 # optimizer
@@ -35,7 +36,7 @@ from implementations.pixelshuffle import main as pixelshuffle_main
 from implementations.AE import main as ae_main
 
 def main():
-    stylegan2_main()
+    pix2pixhd_main()
 
 if __name__ == "__main__":
     main()

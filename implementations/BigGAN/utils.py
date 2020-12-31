@@ -9,7 +9,7 @@ from tqdm import tqdm
 from .model import Generator, Discriminator, init_weight_ortho
 
 from ..general import AnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..gan_utils import get_device, GANTrainingStatus, sample_nnoise, EMA, DiffAugment
+from ..gan_utils import get_device, GANTrainingStatus, sample_nnoise, DiffAugment
 from ..gan_utils.losses import HingeLoss
 
 def grad_accumulate_train(
