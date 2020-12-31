@@ -25,7 +25,7 @@ var app = new Vue({
             [
                 {name: "BigGAN (failed)", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/BigGAN/result/14000.png"},
                 {name: "StyleGAN2 + AdaBelief + DiffAugment", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/AdaBelief/result/108000.png"},
-                {name: "", src: ""}
+                {name: "pix2pixHD", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/pix2pixHD/result/220000.jpg"}
             ]
         ]
     }
