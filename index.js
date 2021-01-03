@@ -1,4 +1,4 @@
-var app = new Vue({
+var results = new Vue({
     el: "#results",
     data: {
         results: [
@@ -27,6 +27,24 @@ var app = new Vue({
                 {name: "StyleGAN2 + AdaBelief + DiffAugment", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/AdaBelief/result/108000.png"},
                 {name: "pix2pixHD", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/pix2pixHD/result/220000.jpg"}
             ]
+        ]
+    }
+})
+
+var weights = new Vue({
+    el: "#weights",
+    data: {
+        license: "https://github.com/STomoya/animeface",
+        weights: [
+            {
+                name: "StyleGAN2 animeface 128pix",
+                link: "https://drive.google.com/file/d/1TkeD5oNK8hzyfY3dcf8W_gdi2ZVELEoK/view?usp=sharing",
+                src:  "https://github.com/STomoya/animeface/blob/master/implementations/StyleGAN2/model.py",
+                code: {
+                    param: "G = Generator(\n  image_size=128, image_channles=3, style_dim=512,\n  channels=32, max_channels=512, block_num_conv=2,\n  map_num_layers=8, map_lr=0.01)",
+                    input: "z = torch.empty(1, 512).normal_(0., 1.)"
+                }
+            }
         ]
     }
 })

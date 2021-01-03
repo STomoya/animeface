@@ -24,7 +24,7 @@
                         <a class="nav-link" href="#dataset">Datasets</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"></a>
+                        <a class="nav-link" href="#weights">Weights</a>
                     </li>
                 </ul>
             </div>
@@ -48,7 +48,7 @@
         <div class="card-deck mb-2">
             <div class="row mb-2" v-for="result_row in results">
                 <div class="card m-2" v-for="result in result_row">
-                    <img class="card-image-top img-fluid" v-bind:src="result.src" alt="">
+                    <img class="card-image-top img-fluid" :src="result.src" alt="">
                     <div class="card-body">
                     <p class="card-text">{{result.name}}</p>
                     </div>
@@ -61,17 +61,42 @@
     <div class="container mt-3" id="dataset">
         <h3>Datasets</h3>
         <ul>
-            <li><a href="https://www.kaggle.com/splcher/animefacedataset">Anime Face Dataset</a></li>
+            <li><a target="_blank" rel="noopener noreferrer" href="https://www.kaggle.com/splcher/animefacedataset">Anime Face Dataset</a></li>
             <p>Anime faces collected from <a href="http://www.getchu.com/">Getchu.com</a>.<br>
                 Based on <a href="https://github.com/Mckinsey666/Anime-Face-Dataset">Mckinsey666</a>'s dataset.<br>
                 63.6K images.</p>
-            <li><a href="https://www.kaggle.com/mylesoneill/tagged-anime-illustrations">Tagged Anime Illustrations</a></li>
+            <li><a target="_blank" rel="noopener noreferrer" href="https://www.kaggle.com/mylesoneill/tagged-anime-illustrations">Tagged Anime Illustrations</a></li>
             <p>A subset of the <a href="https://www.gwern.net/Danbooru2017">Danbooru2017</a>, and the <a href="http://www.nurs.or.jp/~nagadomi/animeface-character-dataset/">moeimouto</a> face dataset.
                 <br>337K Danbooru images, 17.4K moeimouto face images.</p>
-            <li><a href="https://www.gwern.net/Crops#danbooru2019-portraits">Danbooru 2019 portraits</a></li>
+            <li><a target="_blank" rel="noopener noreferrer" href="https://www.gwern.net/Crops#danbooru2019-portraits">Danbooru 2019 portraits</a></li>
             <p>Portraits of anime characters collected from <a href="https://www.gwern.net/Danbooru2019">Danbooru2019</a>.<br>
                 302K portraits.</p>
         </ul>
+    </div>
+
+    <!-- weights -->
+    <div class="container mt-3" id="weights">
+        <h3>Pre-trained Weights</h3>
+        <div id="accordion">
+            <div class="card" v-for="(weight, index) in weights">
+                <div class="card-header" :id="['heading' + index]">
+                    <h5 class="mb-0">
+                        <button class="btn btn-link collapsed" data-toggle="collapse" :data-target="['#collapse' + index]" aria-expanded="false" :aria-controls="['collapse' + index]">
+                        {{weight.name}}
+                        </button>
+                    </h5>
+                </div>
+            
+                <div :id="['collapse' + index]" class="collapse" :aria-labelledby="['heading' + index]" data-parent="#accordion">
+                    <div class="card-body">
+                        <p class="card-text">Parameters<br><pre class="border rounded p-1"><code>{{weight.code.param}}</code></pre></p>
+                        <p class="card-text">Input<br><pre class="border rounded p-1"><code>{{weight.code.input}}</code></pre></p>
+                        <a target="_blank" rel="noopener noreferrer" :href="weight.src" class="card-link">MODEL</a>
+                        <a target="_blank" rel="noopener noreferrer" :href="weight.link" class="card-link">WEIGHT</a>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- footer -->
