@@ -79,6 +79,10 @@ deep models for anime images.
 - pixel shuffle.  
     [paper](https://arxiv.org/abs/1609.05158)
 
+## Weights
+
+See `weights.md`
+
 ## Reference
 
 ```
