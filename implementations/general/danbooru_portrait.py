@@ -1,4 +1,5 @@
 
+import random
 from pathlib import Path
 
 from torch.utils.data import Dataset
@@ -11,8 +12,11 @@ class DanbooruPortraitDataset(Dataset):
 
     images
     '''
-    def __init__(self, image_size, transform=None):
+    def __init__(self, image_size, transform=None, num_images=None):
         self.image_paths = self._load()
+        if num_images is not None:
+            assert isinstance(num_images, int)
+            self.image_paths = random.shuffle(self.image_paths)[:num_images]
         self.length = len(self.image_paths)
         if transform:
             self.transform = transform
@@ -43,8 +47,8 @@ class DanbooruPortraitDataset(Dataset):
         return image_paths
 
 class XDoGDanbooruPortraitDataset(DanbooruPortraitDataset):
-    def __init__(self, image_size, transform=None):
-        super().__init__(image_size, transform)
+    def __init__(self, image_size, transform=None, num_images=None):
+        super().__init__(image_size, transform, num_images)
         self.xdog_paths = [path.replace('portraits/portraits', 'portraits/xdog') for path in self.image_paths]
         if transform is None:
             self.transform = T.Compose([
