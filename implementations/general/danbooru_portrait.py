@@ -16,7 +16,8 @@ class DanbooruPortraitDataset(Dataset):
         self.image_paths = self._load()
         if num_images is not None:
             assert isinstance(num_images, int)
-            self.image_paths = random.shuffle(self.image_paths)[:num_images]
+            random.shuffle(self.image_paths)
+            self.image_paths = self.image_paths[:num_images]
         self.length = len(self.image_paths)
         if transform:
             self.transform = transform
