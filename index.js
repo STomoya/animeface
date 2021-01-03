@@ -34,7 +34,7 @@ var results = new Vue({
 var weights = new Vue({
     el: "#weights",
     data: {
-        license: "https://github.com/STomoya/animeface",
+        license: "https://github.com/STomoya/animeface/blob/master/LICENSE",
         weights: [
             {
                 name: "StyleGAN2 animeface 128pix",
