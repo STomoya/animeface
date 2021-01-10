@@ -67,6 +67,8 @@ deep models for anime images.
 
 - Auto Encoder (AE)  
     [paper](https://www.cs.toronto.edu/~hinton/science.pdf)
+- Variational Auto Encoder (VAE).  
+    [paper](https://arxiv.org/abs/1312.6114)
 
 ### Other
 
