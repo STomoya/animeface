@@ -13,7 +13,7 @@ from ..gan_utils import sample_nnoise, AdaBelief
 
 from .model import VAE, init_weight
 
-recons = nn.MSELoss()
+recons = nn.MSELoss(reduction='sum')
 def KL_divergence(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
