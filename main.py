@@ -34,9 +34,10 @@ from implementations.pixelshuffle import main as pixelshuffle_main
 
 '''Auto Encoders'''
 from implementations.AE import main as ae_main
+from implementations.VAE import main as vae_main
 
 def main():
-    pix2pixhd_main()
+    vae_main()
 
 if __name__ == "__main__":
     main()
