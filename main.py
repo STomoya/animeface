@@ -24,6 +24,7 @@ from implementations.ACGAN import main as acgan_main
 from implementations.pix2pix import main as pix2pix_main
 from implementations.pix2pixHD import main as pix2pixhd_main
 from implementations.UGATIT import main as ugatit_main
+from implementations.SPADE import main as spade_main
 
 # optimizer
 from implementations.AdaBelief import main as adabelief_main
@@ -37,7 +38,7 @@ from implementations.AE import main as ae_main
 from implementations.VAE import main as vae_main
 
 def main():
-    vae_main()
+    spade_main()
 
 if __name__ == "__main__":
     main()
