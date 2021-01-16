@@ -118,7 +118,7 @@ def train(
                 # save models
                 torch.save(G.state_dict(), f'implementations/SPADE/result/G_{status.batches_done}.pt')
                 if E is not None:
-                    torch.save(G.state_dict(), f'implementations/SPADE/result/E_{status.batches_done}.pt')
+                    torch.save(E.state_dict(), f'implementations/SPADE/result/E_{status.batches_done}.pt')
             
             # updates
             loss_dict = dict(
