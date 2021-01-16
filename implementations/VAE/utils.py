@@ -69,13 +69,6 @@ def train(
             if status.batches_done == max_iter:
                 break
 
-    images = []
-    for index, (src, dst) in enumerate(zip(srcs, dsts)):
-        images.extend([src, dst])
-        if index == num_images - 1:
-            break
-    return torch.cat(images, dim=0)
-
 def _image_grid(src, dst, num_images=6):
     srcs = src.chunk(src.size(0), dim=0)
     dsts = dst.chunk(dst.size(0), dim=0)
