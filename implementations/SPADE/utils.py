@@ -165,7 +165,7 @@ def main():
     # generator
     block_num_conv = 2
     spade_hidden_channels = 128
-    g_norm_name = 'in'
+    g_norm_name = 'bn'
     g_act_name  = 'lrelu'
     g_use_sn    = True
     g_use_bias  = True
@@ -188,6 +188,7 @@ def main():
     max_iters = -1
     lr = 0.0002
     betas = (0.5, 0.999)
+    ttur = True
     kld_lambda = 0.05
     feat_lambda = 10.
 
@@ -239,14 +240,19 @@ def main():
         kld_lambda = 0
     
     # optimizers
-    optimizer_D = AdaBelief(D.parameters(), lr=lr, betas=betas)
+    if ttur:
+        g_lr, d_lr = lr / 2, lr * 2
+        betas = (0., 0.9)
+    else:
+        g_lr, d_lr = lr, lr
+    optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=betas)
     if E is None:
         g_params = G.parameters()
     else:
         g_params = itertools.chain(
             G.parameters(), E.parameters()
         )
-    optimizer_G = AdaBelief(g_params, lr=lr, betas=betas)
+    optimizer_G = optim.Adam(g_params, lr=g_lr, betas=betas)
 
     train(
         dataset, max_iters, sampler, z_dim, test_batch,
