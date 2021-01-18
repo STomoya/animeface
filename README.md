@@ -48,6 +48,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1711.11585) | [code](https://github.com/NVIDIA/pix2pixHD)
 - single GAN (SinGAN).  
     [paper](https://arxiv.org/abs/1905.01164) | [code](https://github.com/tamarott/SinGAN)
+- Spatially-Adaptive Normalization (SPADE).  
+    [paper](https://arxiv.org/abs/1903.07291) | [code](https://github.com/NVlabs/SPADE)
 - style-based GAN (StyleGAN).  
     [paper](https://arxiv.org/abs/1812.04948) | [code](https://github.com/NVlabs/stylegan)
 - style-based GAN 2 (StyleGAN2).  
