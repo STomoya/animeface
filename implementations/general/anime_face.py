@@ -1,4 +1,5 @@
 
+import random
 import csv
 from pathlib import Path
 import glob
@@ -92,6 +93,9 @@ class XDoGAnimeFaceDataset(YearAnimeFaceDataset):
         xdog_image = self.transform(xdog_image)
 
         return rgb_image, xdog_image
+
+    def shuffle_xdog(self):
+        random.shuffle(self.xdog_paths)
 
 class LabeledAnimeFaceDataset(Dataset):
     '''
