@@ -71,6 +71,9 @@ class XDoGDanbooruPortraitDataset(DanbooruPortraitDataset):
 
         return rgb_image, xdog_image
 
+    def shuffle_xdog(self):
+        random.shuffle(self.xdog_paths)
+
 if __name__ == "__main__":
     dataset = XDoGDanbooruPortraitDataset(128)
     from torch.utils.data import DataLoader
