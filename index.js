@@ -26,6 +26,11 @@ var results = new Vue({
                 {name: "BigGAN (failed)", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/BigGAN/result/14000.png"},
                 {name: "StyleGAN2 + AdaBelief + DiffAugment", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/AdaBelief/result/108000.png"},
                 {name: "pix2pixHD", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/pix2pixHD/result/220000.jpg"}
+            ],
+            [
+                {name: "SPADE", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/SPADE/result/test_185000.jpg"},
+                {name: "CycleGAN", src: "https://raw.githubusercontent.com/STomoya/animeface/master/implementations/CycleGAN/result/test_416000.jpg"},
+                {name: "", src: ""}
             ]
         ]
     }
