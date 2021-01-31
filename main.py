@@ -13,6 +13,8 @@ from implementations.StyleGAN2 import main as stylegan2_main
 from implementations.HoloGAN import main as hologan_main
 from implementations.BigGAN import main as biggan_main
 
+from implementations.original.SEBigGAN import main as sebiggan_main
+
 # image manipulation
 from implementations.SinGAN import main as singan_main
 
@@ -39,7 +41,7 @@ from implementations.AE import main as ae_main
 from implementations.VAE import main as vae_main
 
 def main():
-    cyclegan_main()
+    sebiggan_main()
 
 if __name__ == "__main__":
     main()
