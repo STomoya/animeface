@@ -417,6 +417,6 @@ if __name__ == "__main__":
         init_weight_N01
     )
     g.apply(init_weight_N01)
-    image = g((z, z))
+    image, style = g((z, z))
     prob = d(image)
     print(image.size(), prob.size())
