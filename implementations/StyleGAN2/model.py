@@ -232,7 +232,7 @@ class MiniBatchStdDev(nn.Module):
         return out
 
     def __check_group_size(self, batch_size):
-        if self.group_size % batch_size == 0: return self.group_size
+        if batch_size % self.group_size == 0: return self.group_size
         else:                                 return batch_size
 
 '''to RGB'''
