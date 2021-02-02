@@ -3,6 +3,8 @@
 # Shengyu Zhao, Zhijian Liu, Ji Lin, Jun-Yan Zhu, and Song Han
 # https://arxiv.org/pdf/2006.10738
 
+import random
+
 import torch
 import torch.nn.functional as F
 
@@ -52,6 +54,10 @@ def rand_translation(x, ratio=0.125):
     x = x_pad.permute(0, 2, 3, 1).contiguous()[grid_batch, grid_x, grid_y].permute(0, 3, 1, 2)
     return x
 
+def rand_flip(x, p=0.5):
+    if random.random() > p:
+        x.flip(-1)
+    return x
 
 def rand_cutout(x, ratio=0.5):
     cutout_size = int(x.size(2) * ratio + 0.5), int(x.size(3) * ratio + 0.5)
@@ -72,6 +78,6 @@ def rand_cutout(x, ratio=0.5):
 
 AUGMENT_FNS = {
     'color': [rand_brightness, rand_saturation, rand_contrast],
-    'translation': [rand_translation],
+    'translation': [rand_flip, rand_translation],
     'cutout': [rand_cutout],
 }
