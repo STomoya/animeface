@@ -8,12 +8,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import grad, Variable
 from torch.cuda.amp import autocast, GradScaler
+from torchvision.utils import save_image
 import numpy as np
-from tqdm import tqdm
 
 from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..gan_utils import sample_nnoise, get_device, GANTrainingStatus, DiffAugment
-from ..gan_utils.losses import GANLoss
+from ..gan_utils import sample_nnoise, DiffAugment, update_ema
+from ..general import get_device, Status
+from ..gan_utils.losses import GANLoss, HingeLoss, LSGANLoss
 
 from .model import Generator, Discriminator, init_weight_N01
 
@@ -60,17 +61,6 @@ def update_pl_mean(old, new, decay=0.99):
     '''exponential moving average'''
     return decay * old + (1 - decay) * new
 
-def update_ema(G, G_ema, decay=0.999):
-    G.eval()
-
-    with torch.no_grad():
-        param_ema = dict(G_ema.named_parameters())
-        param     = dict(G.named_parameters())
-        for key in param_ema.keys():
-            param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
-
-    G.train()
-
 def train(
     max_iter, dataset, sampler, const_z,
     G, G_ema, D, optimizer_G, optimizer_D,
@@ -79,10 +69,9 @@ def train(
     save=1000
 ):
     
-    status  = GANTrainingStatus()
+    status  = Status(max_iter)
     pl_mean = 0.
     loss    = GANLoss()
-    bar     = tqdm(total=max_iter)
     scaler  = GradScaler() if amp else None
     augment = functools.partial(DiffAugment, policy=policy)
 
@@ -158,15 +147,22 @@ def train(
             if status.batches_done % save == 0:
                 with torch.no_grad():
                     images, _ = G_ema(const_z)
-                status.save_image('implementations/StyleGAN2/result', images, nrow=4)
+                save_image(images, f'implementations/StyleGAN2/result/{status.batches_done}.jpg')
                 torch.save(G_ema.state_dict(), f'implementations/StyleGAN2/result/G_{status.batches_done}.pt')
 
             # updates
-            G_loss_pyfloat, D_loss_pyfloat = G_loss.item(), D_loss.item()
-            status.append(G_loss_pyfloat, D_loss_pyfloat)
-            bar.set_postfix_str(f'G : {G_loss_pyfloat:.5f} D : {D_loss_pyfloat:.5f}')
-            bar.update(1)
-            if scaler is not None: scaler.update()
+            loss_dict = dict(
+                G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
+                D=D_loss.item() if not torch.isnan(D_loss).any() else 0
+            )
+            status.update(loss_dict)
+            if scaler is not None:
+                scaler.update()
+
+            if status.batches_done == max_iter:
+                break
+    
+    status.plot()
 
 def main():
 
