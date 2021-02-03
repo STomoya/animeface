@@ -147,8 +147,9 @@ def train(
             if status.batches_done % save == 0:
                 with torch.no_grad():
                     images, _ = G_ema(const_z)
-                save_image(images, f'implementations/StyleGAN2/result/{status.batches_done}.jpg')
+                save_image(images, f'implementations/StyleGAN2/result/{status.batches_done}.jpg', nrow=4, normalize=True, range=(-1, 1))
                 torch.save(G_ema.state_dict(), f'implementations/StyleGAN2/result/G_{status.batches_done}.pt')
+            save_image(fake, f'running.jpg', nrow=4, normalize=True, range=(-1, 1))
 
             # updates
             loss_dict = dict(
@@ -170,18 +171,20 @@ def main():
     # data
     image_size = 128
     min_year = 2010
+    num_images = 60000
     image_channels = 3
-    batch_size = 32
+    batch_size = 12
 
     # model
     # G
-    style_dim = 512
+    style_dim = 1024    # increase latent dim
     channels = 32
-    max_channels = 512
+    max_channels = 1024 # increase model size
     block_num_conv = 2
-    map_num_layers = 8
+    map_num_layers = 4  # decrease layers
     map_lr = 0.01
     # D
+    normalize = False # disable normalizing latent
     mbsd_groups = 4
 
     # traning
@@ -190,8 +193,8 @@ def main():
     betas = (0., 0.99)
     g_k = 8  # calc pl every g_k iter
     d_k = 16 # calc gp every d_k iter
-    r1_lambda = 10.
-    pl_lambda = 0.
+    r1_lambda = 5. # decrease r1
+    pl_lambda = 0. # disable pl
     policy = 'color,translation'
     amp = True
 
@@ -199,6 +202,7 @@ def main():
 
     # dataset
     dataset = YearAnimeFaceDataset(image_size, min_year)
+    dataset = DanbooruPortraitDataset(image_size, num_images=num_images)
     dataset = to_loader(
                 dataset, batch_size, shuffle=True,
                 num_workers=os.cpu_count(), use_gpu=torch.cuda.is_available())
@@ -211,10 +215,10 @@ def main():
     # models
     G = Generator(
             image_size, image_channels, style_dim, channels, max_channels,
-            block_num_conv, map_num_layers, map_lr)
+            block_num_conv, map_num_layers, normalize, map_lr)
     G_ema = Generator(
             image_size, image_channels, style_dim, channels, max_channels,
-            block_num_conv, map_num_layers, map_lr)
+            block_num_conv, map_num_layers, normalize, map_lr)
     D = Discriminator(
             image_size, image_channels, channels, max_channels, 
             block_num_conv, mbsd_groups)
