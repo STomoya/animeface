@@ -1,3 +1,6 @@
+
+ARGS=''
+
 new:
 	mkdir implementations/${name}
 	mkdir implementations/${name}/result
@@ -15,4 +18,4 @@ check:
 	docker-compose run --rm python python ${file}
 
 run:
-	docker-compose run --rm python python main.py
+	docker-compose run --rm python python main.py ${ARGS}
