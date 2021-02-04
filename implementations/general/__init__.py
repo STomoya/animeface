@@ -3,6 +3,7 @@ from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeled
 from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
 from .danbooru_portrait import DanbooruPortraitDataset, XDoGDanbooruPortraitDataset
 from .utils import get_device, Status
+from .arg_utils import save_args
 
 from torch.utils.data import DataLoader
 
