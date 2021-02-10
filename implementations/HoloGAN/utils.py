@@ -199,7 +199,7 @@ def style_criterion(fake_logits, real_logits, style_lambda=1.):
 def identity_criterion(z, z_reconstruct, identity_lambda=1):
     return identity_lambda * ((z_reconstruct - z) ** 2).mean()
 
-def main():
+def main(parser):
     # parameters
     # data
     image_size = 128

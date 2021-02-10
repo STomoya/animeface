@@ -124,7 +124,7 @@ def train(
                 break
 
 
-def main():
+def main(parser):
 
     # data
     image_size = 128

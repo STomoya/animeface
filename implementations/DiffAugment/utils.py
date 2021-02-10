@@ -218,7 +218,7 @@ def calc_gradient_penalty(real_image, D, phase):
     gradients = (gradients ** 2).sum(dim=1).mean()
     return gradients / 2
 
-def main():
+def main(parser):
 
     latent_dim = 512
     # params for wgan_gp

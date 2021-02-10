@@ -165,10 +165,7 @@ class GaussianBlur(object):
     def __call__(self, sample):
         return sample.filter(ImageFilter.GaussianBlur(self.radius))
 
-def main(
-    dataset_class,
-    to_loader
-):
+def main(parser):
 
     image_size = 256
     epochs = 100

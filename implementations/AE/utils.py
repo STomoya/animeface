@@ -61,7 +61,7 @@ def train(
             best_loss = epoch_loss
             best_epoch = epoch
 
-def main():
+def main(parser):
 
     # data
     min_year = 2010

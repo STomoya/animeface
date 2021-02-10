@@ -91,7 +91,7 @@ def gradient_penalty(D, real_image, fake_image, device):
 
     return penalty
 
-def main():
+def main(parser):
     batch_size = 32
     image_size = 128
     epochs = 150

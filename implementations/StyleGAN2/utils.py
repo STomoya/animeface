@@ -168,7 +168,7 @@ def train(
             bar.update(1)
             if scaler is not None: scaler.update()
 
-def main():
+def main(parser):
 
     # params
     # data

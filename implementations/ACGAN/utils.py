@@ -106,7 +106,7 @@ def train(
             if batches_done % save_interval == 0:
                 save_image(fake_image.data[:25], "implementations/ACGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
-def main():
+def main(parser):
     batch_size = 32
     epochs = 150
     latent_dim = 200
