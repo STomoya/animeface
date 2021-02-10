@@ -8,5 +8,6 @@ def main():
     module = import_module(f'.{args.name}', 'implementations')
     module.main(parser)
 
+
 if __name__ == "__main__":
     main()

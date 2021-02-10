@@ -232,7 +232,7 @@ class MiniBatchStdDev(nn.Module):
         return out
 
     def __check_group_size(self, batch_size):
-        if self.group_size % batch_size == 0: return self.group_size
+        if batch_size % self.group_size == 0: return self.group_size
         else:                                 return batch_size
 
 '''to RGB'''
@@ -261,10 +261,12 @@ Networks
 
 '''Mapping Network'''
 class Mapping(nn.Module):
-    def __init__(self, style_dim, num_layers=8, lr=0.01):
+    def __init__(self, style_dim, num_layers=8, normalize=True, lr=0.01):
         super().__init__()
 
-        self.normalize = PixelNorm()
+        if normalize:
+            self.normalize = PixelNorm()
+        else: self.normalize = None
 
         layers = []
         for _ in range(num_layers):
@@ -275,7 +277,8 @@ class Mapping(nn.Module):
         self.map = nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.normalize(x)
+        if self.normalize is not None:
+            x = self.normalize(x)
         return self.map(x)
 
 '''Synthesis Network ver. Skip'''
@@ -331,11 +334,13 @@ class Synthesis(nn.Module):
 '''Generator ver. Skip'''
 class Generator(nn.Module):
     def __init__(self,
-        image_size=128, image_channels=3, style_dim=512, channels=32, max_channels=512, block_num_conv=2, map_num_layers=8, map_lr=0.01
+        image_size=128, image_channels=3, style_dim=512,
+        channels=32, max_channels=512, block_num_conv=2,
+        map_num_layers=8, normalize_latent=True, map_lr=0.01
     ):
         super().__init__()
 
-        self.map = Mapping(style_dim, map_num_layers, map_lr)
+        self.map = Mapping(style_dim, map_num_layers, normalize_latent, map_lr)
         self.synthesis = Synthesis(
             image_size, image_channels, style_dim,
             channels, max_channels, block_num_conv
@@ -412,6 +417,6 @@ if __name__ == "__main__":
         init_weight_N01
     )
     g.apply(init_weight_N01)
-    image = g((z, z))
+    image, style = g((z, z))
     prob = d(image)
     print(image.size(), prob.size())
