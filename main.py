@@ -41,7 +41,7 @@ from implementations.AE import main as ae_main
 from implementations.VAE import main as vae_main
 
 def main():
-    sebiggan_main()
+    stylegan2_main()
 
 if __name__ == "__main__":
     main()
