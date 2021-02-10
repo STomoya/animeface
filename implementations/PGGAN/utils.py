@@ -325,7 +325,7 @@ def calc_gradient_penalty(D, real_image, fake_image, mode, device):
 
     return penalty
 
-def main():
+def main(parser):
 
     loss_type = 'lsgan'
     loss_type = 'wgan_gp'

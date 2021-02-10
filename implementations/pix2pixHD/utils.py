@@ -306,7 +306,7 @@ def _image_grid(src, gen, dst, num_images=6):
     return torch.cat(images, dim=0)
     
 
-def main():
+def main(parser):
 
     # parameters
     # data

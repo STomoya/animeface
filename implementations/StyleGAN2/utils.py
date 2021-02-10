@@ -165,7 +165,7 @@ def train(
     
     status.plot()
 
-def main():
+def main(parser):
 
     # params
     # data

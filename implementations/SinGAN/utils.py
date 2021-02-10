@@ -178,7 +178,7 @@ def train(
         img = G.forward(sizes=test)
         save_image(img, './implementations/SinGAN/result/eval_{}x{}.png'.format(*test[-1]), normalize=True, range=(-1, 1))
 
-def main():
+def main(parser):
 
     # parameters
     # data

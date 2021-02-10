@@ -161,7 +161,7 @@ def train(
         torch.save(G.state_dict(), f'implementations/BigGAN/G_128_{epoch}epoch_state_dict.pt')
     status.plot_loss()
 
-def main():
+def main(parser):
     # params
     # data
     image_size = 128

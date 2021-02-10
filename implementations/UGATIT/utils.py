@@ -186,7 +186,7 @@ class SoftMozaic(object):
         sample = sample.filter(ImageFilter.GaussianBlur(self.radius))
         return sample.resize([int(x / self.linear_scale) for x in sample.size]).resize(sample.size)
 
-def main():
+def main(parser):
     import torchvision.transforms as T
 
     epochs = 5

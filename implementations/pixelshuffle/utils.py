@@ -107,7 +107,7 @@ def train(
             if batches_done % save_interval == 0:
                 save_image(fake_image.data[:25], "implementations/pixelshuffle/result/%d.png" % batches_done, nrow=5, normalize=True)
 
-def main():
+def main(parser):
     batch_size = 32
     image_size = 128
     epochs = 150
