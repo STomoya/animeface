@@ -4,7 +4,11 @@ import warnings
 import torch
 from tqdm import tqdm
 
-def get_device(): return torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+def get_device(gpu=True):
+    if gpu:
+        return torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        return torch.device('cpu')
 
 class Status:
     def __init__(self, max_iters):
