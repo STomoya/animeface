@@ -178,19 +178,6 @@ def main(parser):
     args = parser.parse_args()
     save_args(args)
 
-    # params
-    # data
-    # image_size = 128
-    # batch_size = 12
-    # target_batch_size = 30
-    # # model
-    # channels = 64
-    # deep = False
-    # z_dim = 120
-    # training
-    # epochs = 100
-    # d_lr = 2e-4
-    # g_lr = 5e-5
     betas = (args.beta1, args.beta2)
 
     device = get_device(not args.disable_gpu)
