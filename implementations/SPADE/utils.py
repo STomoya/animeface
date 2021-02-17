@@ -193,49 +193,16 @@ def main(parser):
     args = parser.parse_args()
     save_args(args)
 
-    # # params
-    # # data
-    # image_size = 256
-    # min_year   = 2005  # for animeface
-    # num_images = 60000 # for danbooru
-    # line_channels = 1
-    # rgb_channels  = 3
-    # batch_size = 32
-    # test_images = 6
-
-    # # model
-    # z_dim = 256
-    # channels = 32
-    # max_channels = 2**10
     # # generator
-    # block_num_conv = 2
-    # spade_hidden_channels = 128
-    # g_norm_name = 'bn'
-    # g_act_name  = 'lrelu'
     g_use_sn    = not args.g_disable_sn
     g_use_bias  = not args.g_disable_bias
     # discriminator
-    # num_scale = 2
-    # num_layers = 3
-    # d_norm_name = 'in'
-    # d_act_name  = 'lrelu'
     d_use_sn    = not args.d_disable_sn
     d_use_bias  = not args.d_disable_bias
     # encoder
     image_guided = not args.no_encoder # if False, will not use Encoder
-    # target_resl = 4
-    # e_norm_name = 'in'
-    # e_act_name  = 'relu'
     e_use_sn    = not args.e_disable_sn
     e_use_bias  = not args.e_disable_bias
-
-    # # training
-    # max_iters = -1
-    # lr = 0.0002
-    # betas = (0.5, 0.999)
-    # ttur = True
-    # kld_lambda = 0.05
-    # feat_lambda = 10.
 
     amp = not args.disable_amp
     device = get_device(not args.disable_gpu)
