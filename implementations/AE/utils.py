@@ -9,8 +9,7 @@ from tqdm import tqdm
 
 from .model import AE
 
-from ..general import YearAnimeFaceDataset, to_loader
-from ..gan_utils import get_device
+from ..general import YearAnimeFaceDataset, to_loader, save_args, get_device
 
 def train(
     dataset, epochs,
@@ -61,46 +60,44 @@ def train(
             best_loss = epoch_loss
             best_epoch = epoch
 
+def add_arguments(parser):
+    parser.add_argument('--enc-dim', default=128, type=int, help='dimension to encode to')
+    parser.add_argument('--min-size', default=8, type=int, help='minimum size before flatten')
+    parser.add_argument('--num-layers', default=None, type=int, help='number of layers in encoder. if not given, will be calculated from --min-size')
+    parser.add_argument('--img-channels', default=3, type=int, help='number of channels for the input image')
+    parser.add_argument('--channels', default=64, type=int, help='channel width multiplier')
+    parser.add_argument('--norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name')
+    parser.add_argument('--act-name', default='relu', choices=['relu', 'lrelu'], help='activation function')
+    parser.add_argument('--up-mode', default='bilinear', type=str, help='upsample mode')
+    parser.add_argument('--output-act', default='tanh', choices=['tanh', 'sigmoid'], help='activation function on output')
+    return parser
+
 def main(parser):
 
-    # data
-    min_year = 2010
-    image_size = 256
-    batch_size = 64
-
-    # model
-    enc_dim = 128
-    min_size = 8
-    num_layers = None
-    img_channels = 3
-    channels = 64
-    norm_name = 'bn'
-    act_name = 'relu'
-    up_mode = 'bilinear'
-    output_act = 'tanh' # use 'tanh' instead when normlizing the data to [-1, 1]
-
-    # training
-    epochs = 100
-    amp = True
-    image_range = (0, 1) if output_act == 'sigmoid' else (-1, 1)
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
+    
+    amp = not args.disable_amp
+    image_range = (0, 1) if args.output_act == 'sigmoid' else (-1, 1)
 
     # define dataset
-    dataset = YearAnimeFaceDataset(image_size, min_year)
+    dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
     # transform w/o normalization
-    if output_act == 'sigmoid':
+    if args.output_act == 'sigmoid':
         dataset.transform = T.Compose([
-            T.Resize((image_size, image_size)),
+            T.Resize((args.image_size, args.image_size)),
             T.ToTensor()
         ])
-    dataset = to_loader(dataset, batch_size, use_gpu=torch.cuda.is_available())
+    dataset = to_loader(dataset, args.batch_size, use_gpu=torch.cuda.is_available())
 
-    device = get_device()
+    device = get_device(not args.disable_gpu)
 
     # define model
     model = AE(
-        enc_dim, image_size, min_size, num_layers,
-        img_channels, channels, norm_name, act_name,
-        up_mode, output_act
+        args.enc_dim, args.image_size, args.min_size, args.num_layers,
+        args.img_channels, args.channels, args.norm_name, args.act_name,
+        args.up_mode, args.output_act
     )
     model.to(device)
 
@@ -108,10 +105,10 @@ def main(parser):
     optimizer = optim.Adam(model.parameters())
 
     # define loss function
-    criterion = nn.BCEWithLogitsLoss() if output_act == 'sigmoid' else nn.MSELoss()
+    criterion = nn.BCEWithLogitsLoss() if args.output_act == 'sigmoid' else nn.MSELoss()
 
     train(
-        dataset, epochs, model,
+        dataset, args.default_epochs, model,
         optimizer, criterion, device,
         amp, 1000, image_range
     )
