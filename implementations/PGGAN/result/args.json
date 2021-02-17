@@ -1,0 +1,17 @@
+{
+  "name": "PGGAN",
+  "disable_gpu": false,
+  "disable_amp": false,
+  "dataset": "animeface",
+  "image_size": 128,
+  "batch_size": 32,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "loss_type": "wgan_gp",
+  "latent_dim": 100,
+  "gp_lambda": 10,
+  "drift_epsilon": 0.001
+}

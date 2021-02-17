@@ -10,7 +10,7 @@ import numpy as np
 from .config import *
 from .model import Generator, Discriminator
 
-from ..general import AnimeFaceDataset, to_loader
+from ..general import AnimeFaceDataset, to_loader, save_args
 
 class Step:
     '''
@@ -325,15 +325,18 @@ def calc_gradient_penalty(D, real_image, fake_image, mode, device):
 
     return penalty
 
+def add_arguments(parser):
+    parser.add_argument('--loss-type', default='wgan_gp', choices=['wgan_gp', 'lsgan'], help='loss type')
+    parser.add_argument('--latent-dim', default=100, type=int, help='dimension of input latent')
+    parser.add_argument('--gp-lambda', default=10, type=float, help='lambda for gradient penalty')
+    parser.add_argument('--drift-epsilon', default=0.001, type=float, help='epsilon for drift')
+    return parser
+
 def main(parser):
 
-    loss_type = 'lsgan'
-    loss_type = 'wgan_gp'
-
-    latent_dim = 100
-    # params for wgan_gp
-    gp_lambda = 10
-    drift_epsilon = 0.001
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
     # add function for updating transform
     class AnimeFaceDatasetAlpha(AnimeFaceDataset):
@@ -349,19 +352,22 @@ def main(parser):
     
     dataset = AnimeFaceDatasetAlpha(image_size=4)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
 
-    G = Generator(latent_dim=latent_dim)
-    D = Discriminator(loss_type=loss_type)
+    G = Generator(latent_dim=args.latent_dim)
+    D = Discriminator(loss_type=args.loss_type)
 
     G.to(device)
     D.to(device)
 
-    if loss_type == 'lsgan':
+    if args.loss_type == 'lsgan':
         criterion = nn.MSELoss()
 
         train_lsgan(
-            latent_dim=latent_dim,
+            latent_dim=args.latent_dim,
             G=G,
             D=D,
             criterion=criterion,
@@ -371,11 +377,11 @@ def main(parser):
         )
     else:
         train_wgangp(
-            latent_dim=latent_dim,
+            latent_dim=args.latent_dim,
             G=G,
             D=D,
-            gp_lambda=gp_lambda,
-            drift_epsilon=drift_epsilon,
+            gp_lambda=args.gp_lambda,
+            drift_epsilon=args.drift_epsilon,
             dataset=dataset,
             to_loader=to_loader,
             device=device
