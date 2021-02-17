@@ -338,38 +338,7 @@ def main(parser):
     args = parser.parse_args()
     save_args(args)
 
-    # parameters
-    # data
-    # dataset_name = 'animeface'
-    # image_size = 256
-    # batch_size = 16
-    # min_year = 2010
-    # input_channels = 1
-    # target_channels = 3
-
-    # # model
-    # channels = 32
-    # # G
-    # local_num_blocks = 3
-    # global_num_blocks = 9
-    # global_num_downs = 4
-    # g_norm_name = 'in'
-    # g_act_name = 'relu'
-    # # D
-    # d_num_scale = 3
-    # d_norm_name = 'in'
-    # d_act_name  = 'lrelu'
-
-    # # training
-    # train_once = False
-    # g_epochs = 100 * 2
-    # g_d_scale = 2
-    # l_epochs = 50 * 2
-    # l_d_scale = d_num_scale
-    # fine_from = 10
-    # lr = 0.0002
     betas = (args.beta1, args.beta2)
-    # feat_lambda = 10
     
     amp = not args.disable_amp
     device = get_device(not args.disable_gpu)
