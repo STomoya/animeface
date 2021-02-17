@@ -10,7 +10,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
 from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import get_device, Status
+from ..general import get_device, Status, save_args
 from ..gan_utils import sample_nnoise, AdaBelief
 from ..gan_utils.losses import HingeLoss, GANLoss
 
@@ -146,81 +146,126 @@ def _image_grid(line, gen, rgb, num_images=6):
 
     return torch.cat(images, dim=0)
 
-def main(parser):
-
-    # params
-    # data
-    image_size = 256
-    min_year   = 2005  # for animeface
-    num_images = 60000 # for danbooru
-    line_channels = 1
-    rgb_channels  = 3
-    batch_size = 32
-    test_images = 6
+def add_argument(parser):
+    parser.add_argument('--line-channels', default=1, type=int, help='number of channels of line art images')
+    parser.add_argument('--rgb-channels', default=3, type=int, help='number of channels of the generated images')
+    parser.add_argument('--test-images', default=6, type=int, help='number of images for test')
 
     # model
-    z_dim = 256
-    channels = 32
-    max_channels = 2**10
-    # generator
-    block_num_conv = 2
-    spade_hidden_channels = 128
-    g_norm_name = 'bn'
-    g_act_name  = 'lrelu'
-    g_use_sn    = True
-    g_use_bias  = True
+    parser.add_argument('--z-dim', default=256, type=int, help='number of dimensions for input z')
+    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
+    parser.add_argument('--max-channels', default=1024, type=int, help='maximum number of channels')
+    # G
+    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers per residual block')
+    parser.add_argument('--spade-hidden-channels', default=128, type=int, help='number of channels in SPADE hidden layers')
+    parser.add_argument('--g-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of G')
+    parser.add_argument('--g-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of G')
+    parser.add_argument('--g-disable-bias', default=False, action='store_true', help='do not use bias in G')
+    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='do not use spectral normalization in G')
+    # D
+    parser.add_argument('--num-scale', default=2, type=int, help='number of scales to discriminate')
+    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
+    parser.add_argument('--d-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of D')
+    parser.add_argument('--d-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of D')
+    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='do not use bias in D')
+    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='do not use spectral normalization in D')
+    # E
+    parser.add_argument('--no-encoder', default=False, action='store_true', help='do not use encoder')
+    parser.add_argument('--target-resl', default=4, type=int, help='to what resolution down-sample to before FC layers in E')
+    parser.add_argument('--e-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of E')
+    parser.add_argument('--e-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of E')
+    parser.add_argument('--e-disable-bias', default=False, action='store_true', help='do not use bias in E')
+    parser.add_argument('--e-disable-sn', default=False, action='store_true', help='do not use spectral normalization in E')
+
+    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--ttur', default=False, action='store_true', help='use TTUR')
+    parser.add_argument('--kld-lambda', default=0.05, type=float, help='lambda for KL divergence')
+    parser.add_argument('--feat-lambda', default=10., type=float, help='lambda for feature matching loss')
+
+    return parser
+
+
+def main(parser):
+
+    parser = add_argument(parser)
+    args = parser.parse_args()
+    save_args(args)
+
+    # # params
+    # # data
+    # image_size = 256
+    # min_year   = 2005  # for animeface
+    # num_images = 60000 # for danbooru
+    # line_channels = 1
+    # rgb_channels  = 3
+    # batch_size = 32
+    # test_images = 6
+
+    # # model
+    # z_dim = 256
+    # channels = 32
+    # max_channels = 2**10
+    # # generator
+    # block_num_conv = 2
+    # spade_hidden_channels = 128
+    # g_norm_name = 'bn'
+    # g_act_name  = 'lrelu'
+    g_use_sn    = not args.g_disable_sn
+    g_use_bias  = not args.g_disable_bias
     # discriminator
-    num_scale = 2
-    num_layers = 3
-    d_norm_name = 'in'
-    d_act_name  = 'lrelu'
-    d_use_sn    = True
-    d_use_bias  = True
+    # num_scale = 2
+    # num_layers = 3
+    # d_norm_name = 'in'
+    # d_act_name  = 'lrelu'
+    d_use_sn    = not args.d_disable_sn
+    d_use_bias  = not args.d_disable_bias
     # encoder
-    image_guided = True # if False, will not use Encoder
-    target_resl = 4
-    e_norm_name = 'in'
-    e_act_name  = 'relu'
-    e_use_sn    = True
-    e_use_bias  = True
+    image_guided = not args.no_encoder # if False, will not use Encoder
+    # target_resl = 4
+    # e_norm_name = 'in'
+    # e_act_name  = 'relu'
+    e_use_sn    = not args.e_disable_sn
+    e_use_bias  = not args.e_disable_bias
 
-    # training
-    max_iters = -1
-    lr = 0.0002
-    betas = (0.5, 0.999)
-    ttur = True
-    kld_lambda = 0.05
-    feat_lambda = 10.
+    # # training
+    # max_iters = -1
+    # lr = 0.0002
+    # betas = (0.5, 0.999)
+    # ttur = True
+    # kld_lambda = 0.05
+    # feat_lambda = 10.
 
-    amp = True
-    device = get_device()
+    amp = not args.disable_amp
+    device = get_device(not args.disable_gpu)
 
     # dataset
     # dataset = XDoGAnimeFaceDataset(image_size, min_year)
-    dataset = XDoGDanbooruPortraitDataset(image_size, num_images=num_images+test_images)
-    dataset, test = random_split(dataset, [len(dataset)-test_images, test_images])
+    dataset = XDoGDanbooruPortraitDataset(args.image_size, num_images=args.num_images+args.test_images)
+    dataset, test = random_split(dataset, [len(dataset)-args.test_images, args.test_images])
     ## training dataset
-    dataset = to_loader(dataset, batch_size)
+    dataset = to_loader(dataset, args.batch_size)
     ## test batch
-    test    = to_loader(test, test_images, shuffle=False, use_gpu=False)
+    test    = to_loader(test, args.test_images, shuffle=False, use_gpu=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
-    if max_iters < 0:
-        max_iters = len(dataset) * 100
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * 100
     ## noise sampler (ignored when E exists)
     sampler = functools.partial(sample_nnoise, device=device)
 
     # models
     G = Generator(
-        image_size, z_dim, line_channels, rgb_channels,
-        channels, max_channels,
-        block_num_conv, spade_hidden_channels,
-        g_norm_name, g_act_name, g_use_sn, g_use_bias
+        args.image_size, args.z_dim, args.line_channels, args.rgb_channels,
+        args.channels, args.max_channels,
+        args.block_num_conv, args.spade_hidden_channels,
+        args.g_norm_name, args.g_act_name, g_use_sn, g_use_bias
     )
     D = Discriminator(
-        image_size, line_channels+rgb_channels,
-        num_scale, num_layers, channels,
-        d_norm_name, d_act_name, d_use_sn, d_use_bias
+        args.image_size, args.line_channels+args.rgb_channels,
+        args.num_scale, args.num_layers, args.channels,
+        args.d_norm_name, args.d_act_name, d_use_sn, d_use_bias
     )
     G.apply(init_weight_xavier)
     D.apply(init_weight_xavier)
@@ -229,22 +274,23 @@ def main(parser):
     ## create encoder (optional)
     if image_guided:
         E = Encoder(
-            image_size, z_dim, rgb_channels, target_resl,
-            channels, max_channels,
-            e_use_sn, e_use_bias, e_norm_name, e_act_name
+            args.image_size, args.z_dim, args.rgb_channels, args.target_resl,
+            args.channels, args.max_channels,
+            e_use_sn, e_use_bias, args.e_norm_name, args.e_act_name
         )
         E.apply(init_weight_xavier)
         E.to(device)
     else:
         E = None
-        kld_lambda = 0
+        args.kld_lambda = 0
     
     # optimizers
-    if ttur:
-        g_lr, d_lr = lr / 2, lr * 2
+    if args.ttur:
+        g_lr, d_lr = args.lr / 2, args.lr * 2
         betas = (0., 0.9)
     else:
-        g_lr, d_lr = lr, lr
+        g_lr, d_lr = args.lr, args.lr
+        betas = (args.beta1, args.beta2)
     optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=betas)
     if E is None:
         g_params = G.parameters()
@@ -255,8 +301,8 @@ def main(parser):
     optimizer_G = optim.Adam(g_params, lr=g_lr, betas=betas)
 
     train(
-        dataset, max_iters, sampler, z_dim, test_batch,
+        dataset, args.max_iters, sampler, args.z_dim, test_batch,
         G, D, E, optimizer_G, optimizer_D,
-        kld_lambda, feat_lambda, num_scale,
+        args.kld_lambda, args.feat_lambda, args.num_scale,
         device, amp, 1000
     )
