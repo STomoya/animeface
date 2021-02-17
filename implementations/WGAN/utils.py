@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
-from ..general import AnimeFaceDataset, to_loader
+from ..general import AnimeFaceDataset, to_loader, save_args
 
 def train(
     epochs,
@@ -70,37 +70,45 @@ def train(
             if batches_done % save_interval == 0 or batches_done == 1:
                 save_image(fake_image.data[:25], "implementations/WGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
+def add_arguments(parser):
+    parser.add_argument('--epochs', default=150, type=int, help='epochs to train')
+    parser.add_argument('--latent-dim', default=200, type=int, help='dimension of input latent')
+    parser.add_argument('--lr', default=5e-5, type=float, help='learning rate for both generator and discriminator')
+    parser.add_argument('--n-critic', default=5, type=int, help='train G only each "--n-critic" step')
+    parser.add_argument('--clip-value', default=0.01, type=float, help='clip weights to [ - "--clip-value", "--clip-value"] each step')
+    return parser
+
 def main(parser):
-    batch_size = 32
-    image_size = 128
-    epochs = 150
-    latent_dim = 200
-    lr = 5.e-5
-    n_critic = 5
-    clip_value = 0.01
+    
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    dataset = AnimeFaceDataset(image_size)
-    dataset = to_loader(dataset, batch_size)
+    dataset = AnimeFaceDataset(args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
 
-    G = Generator(latent_dim=latent_dim)
+    G = Generator(latent_dim=args.latent_dim)
     D = Discriminator()
 
     G.apply(weights_init_normal)
     D.apply(weights_init_normal)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.RMSprop(G.parameters(), lr=lr)
-    optimizer_D = optim.RMSprop(D.parameters(), lr=lr)
+    optimizer_G = optim.RMSprop(G.parameters(), lr=args.lr)
+    optimizer_D = optim.RMSprop(D.parameters(), lr=args.lr)
 
     train(
-        epochs=epochs,
-        n_critic=n_critic,
-        clip_value=clip_value,
+        epochs=args.epochs,
+        n_critic=args.n_critic,
+        clip_value=args.clip_value,
         dataset=dataset,
-        latent_dim=latent_dim,
+        latent_dim=args.latent_dim,
         G=G,
         optimizer_G=optimizer_G,
         D=D,
