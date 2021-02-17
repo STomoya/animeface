@@ -11,7 +11,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 import numpy as np
 
-from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
+from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader, save_args
 from ..gan_utils import sample_nnoise, DiffAugment, update_ema
 from ..general import get_device, Status
 from ..gan_utils.losses import GANLoss, HingeLoss, LSGANLoss
@@ -165,66 +165,67 @@ def train(
     
     status.plot()
 
+def add_argument(parser):
+    parser.add_argument('--image-channels', default=3, type=int, help='number of channels for the generated image')
+    parser.add_argument('--style-dim', default=512, type=int, help='style feature dimension')
+    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
+    parser.add_argument('--max-channels', default=512, type=int, help='maximum channels')
+    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers in residual block')
+    parser.add_argument('--map-num-layers', default=8, type=int, help='number of layers in mapping network')
+    parser.add_argument('--map-lr', default=0.01, type=float, help='learning rate for mapping network')
+    parser.add_argument('--disable-map-norm', default=False, action='store_true', help='disable pixel normalization in mapping network')
+    parser.add_argument('--mbsd-groups', default=4, type=int, help='number of groups in mini-batch standard deviation')
+
+    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0., type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.99, type=float, help='beta2')
+    parser.add_argument('--g-k', default=8, type=int, help='for lazy regularization. calculate perceptual path length loss every g_k iters')
+    parser.add_argument('--d-k', default=16, type=int, help='for lazy regularization. calculate gradient penalty each d_k iters')
+    parser.add_argument('--r1-lambda', default=10, type=float, help='lambda for r1')
+    parser.add_argument('--pl-lambda', default=0., type=float, help='lambda for perceptual path length loss')
+    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
+    return parser
+    
+
 def main(parser):
 
-    # params
-    # data
-    image_size = 128
-    min_year = 2010
-    num_images = 60000
-    image_channels = 3
-    batch_size = 12
+    parser = add_argument(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    # model
-    # G
-    style_dim = 1024    # increase latent dim
-    channels = 32
-    max_channels = 1024 # increase model size
-    block_num_conv = 2
-    map_num_layers = 4  # decrease layers
-    map_lr = 0.01
-    # D
-    normalize = False # disable normalizing latent
-    mbsd_groups = 4
+    normalize = not args.disable_map_norm
+    betas = (args.beta1, args.beta2)
 
-    # traning
-    max_iter = -1 # if minus 100 epochs
-    lr = 0.001
-    betas = (0., 0.99)
-    g_k = 8  # calc pl every g_k iter
-    d_k = 16 # calc gp every d_k iter
-    r1_lambda = 5. # decrease r1
-    pl_lambda = 0. # disable pl
-    policy = 'color,translation'
-    amp = True
-
-    device = get_device()
+    amp = not args.disable_amp
+    device = get_device(not args.disable_gpu)
 
     # dataset
-    dataset = YearAnimeFaceDataset(image_size, min_year)
-    dataset = DanbooruPortraitDataset(image_size, num_images=num_images)
+    if args.dataset == 'animeface':
+        dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
+    elif args.dataset == 'danbooru':
+        dataset = DanbooruPortraitDataset(args.image_size, num_images=args.num_images)
     dataset = to_loader(
-                dataset, batch_size, shuffle=True,
+                dataset, args.batch_size, shuffle=True,
                 num_workers=os.cpu_count(), use_gpu=torch.cuda.is_available())
 
     # random noise sampler
-    sampler = functools.partial(sample_nnoise, (batch_size, style_dim), device=device)
+    sampler = functools.partial(sample_nnoise, (args.batch_size, args.style_dim), device=device)
     # const input for eval
-    const_z = sample_nnoise((16, style_dim), device=device)
+    const_z = sample_nnoise((16, args.style_dim), device=device)
 
     # models
     G = Generator(
-            image_size, image_channels, style_dim, channels, max_channels,
-            block_num_conv, map_num_layers, normalize, map_lr)
+            args.image_size, args.image_channels, args.style_dim, args.channels, args.max_channels,
+            args.block_num_conv, args.map_num_layers, normalize, args.map_lr)
     G_ema = Generator(
-            image_size, image_channels, style_dim, channels, max_channels,
-            block_num_conv, map_num_layers, normalize, map_lr)
+            args.image_size, args.image_channels, args.style_dim, args.channels, args.max_channels,
+            args.block_num_conv, args.map_num_layers, normalize, args.map_lr)
     D = Discriminator(
-            image_size, image_channels, channels, max_channels, 
-            block_num_conv, mbsd_groups)
+            args.image_size, args.image_channels, args.channels, args.max_channels, 
+            args.block_num_conv, args.mbsd_groups)
     ## init
     G.init_weight(
-        map_init_func=functools.partial(init_weight_N01, lr=map_lr),
+        map_init_func=functools.partial(init_weight_N01, lr=args.map_lr),
         syn_init_func=init_weight_N01)
     G_ema.eval()
     update_ema(G, G_ema, decay=0)
@@ -235,29 +236,29 @@ def main(parser):
     D.to(device)
 
     # optimizer
-    if pl_lambda > 0:
-        g_ratio = g_k / (g_k + 1)
-        g_lr = lr * g_ratio
+    if args.pl_lambda > 0:
+        g_ratio = args.g_k / (args.g_k + 1)
+        g_lr = args.lr * g_ratio
         g_betas = (betas[0]**g_ratio, betas[1]**g_ratio)
-    else: g_lr, g_betas = lr, betas
+    else: g_lr, g_betas = args.lr, betas
 
-    if r1_lambda > 0:
-        d_ratio = d_k / (d_k + 1)
-        d_lr = lr * d_ratio
+    if args.r1_lambda > 0:
+        d_ratio = args.d_k / (args.d_k + 1)
+        d_lr = args.lr * d_ratio
         d_betas = (betas[0]**d_ratio, betas[1]**d_ratio)
-    else: d_lr, d_betas = lr, betas
+    else: d_lr, d_betas = args.lr, betas
     
     optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=g_betas)
     optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=d_betas)
 
-    if max_iter < 0:
-        max_iter = len(dataset) * 100
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
 
     train(
-        max_iter, dataset, sampler, const_z,
+        args.max_iters, dataset, sampler, const_z,
         G, G_ema, D, optimizer_G, optimizer_D,
-        r1_lambda, pl_lambda, d_k, g_k,
-        policy, device, amp, 1000
+        args.r1_lambda, args.pl_lambda, args.d_k, args.g_k,
+        args.policy, device, amp, 1000
     )
 
     
