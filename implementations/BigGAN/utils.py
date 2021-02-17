@@ -8,8 +8,8 @@ from tqdm import tqdm
 
 from .model import Generator, Discriminator, init_weight_ortho
 
-from ..general import AnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..gan_utils import get_device, GANTrainingStatus, sample_nnoise, DiffAugment
+from ..general import AnimeFaceDataset, DanbooruPortraitDataset, to_loader, save_args, get_device
+from ..gan_utils import GANTrainingStatus, sample_nnoise, DiffAugment, update_ema
 from ..gan_utils.losses import HingeLoss
 
 def grad_accumulate_train(
@@ -157,42 +157,58 @@ def train(
             if status.batches_done % verbose_interval == 0 or status.batches_done == 1:
                 print(status)
             if status.batches_done % save_interval == 0 or status.batches_done == 1:
-                status.save_image(save_folder, G, const_z)
+                status.save_image(save_folder, G(const_z))
         torch.save(G.state_dict(), f'implementations/BigGAN/G_128_{epoch}epoch_state_dict.pt')
     status.plot_loss()
 
+def add_arguments(parser):
+    parser.add_argument('--channels', default=64, type=int, help='channel width multiplier')
+    parser.add_argument('--deep', default=False, action='store_true', help='use deep model')
+    parser.add_argument('--z-dim', default=120, type=int, help='latent dimension')
+    parser.add_argument('--epochs', default=100, type=int, help='epochs to train')
+    parser.add_argument('--g-lr', default=0.0002, type=float, help='learning rate for G')
+    parser.add_argument('--d-lr', default=0.00005, type=float, help='learning rate for D')
+    parser.add_argument('--beta1', default=0., type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    return parser
+
 def main(parser):
+
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
+
     # params
     # data
-    image_size = 128
-    batch_size = 12
-    target_batch_size = 30
-    # model
-    channels = 64
-    deep = False
-    z_dim = 120
-    decay = 0.9999
+    # image_size = 128
+    # batch_size = 12
+    # target_batch_size = 30
+    # # model
+    # channels = 64
+    # deep = False
+    # z_dim = 120
     # training
-    epochs = 100
-    d_lr = 2e-4
-    g_lr = 5e-5
-    betas = (0., 0.999)
+    # epochs = 100
+    # d_lr = 2e-4
+    # g_lr = 5e-5
+    betas = (args.beta1, args.beta2)
 
-    device = get_device()
-    G = Generator(image_size, z_dim, deep, channels)
-    D = Discriminator(image_size, deep, channels)
+    device = get_device(not args.disable_gpu)
+    G = Generator(args.image_size, args.z_dim, args.deep, args.channels)
+    D = Discriminator(args.image_size, args.deep, args.channels)
     G.apply(init_weight_ortho)
     D.apply(init_weight_ortho)
-    G_ema = EMA(G, decay)
+    # G_ema = EMA(G, decay)
+    G_ema = None
 
     G.to(device)
     D.to(device)
 
-    dataset = AnimeFaceDataset(image_size)
-    dataset = to_loader(dataset, batch_size)
+    dataset = AnimeFaceDataset(args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
 
-    optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.g_lr, betas=betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.d_lr, betas=betas)
 
     loss = HingeLoss()
 
@@ -204,7 +220,7 @@ def main(parser):
     # )
 
     train(
-        epochs, dataset, z_dim, batch_size,
+        args.epochs, dataset, args.z_dim, args.batch_size,
         G, G_ema, D, optimizer_G, optimizer_D,
         loss, device,
         1000, 1000
