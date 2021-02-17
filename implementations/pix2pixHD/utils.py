@@ -9,7 +9,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
 from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import Status, get_device
+from ..general import Status, get_device, save_args
 from ..gan_utils import AdaBelief
 from ..gan_utils.losses import LSGANLoss, GANLoss, HingeLoss
 
@@ -305,76 +305,107 @@ def _image_grid(src, gen, dst, num_images=6):
             break
     return torch.cat(images, dim=0)
     
+def add_arguments(parser):
+    parser.add_argument('--input-channels', default=1, type=int, help='number of channels of the src image')
+    parser.add_argument('--target-channels', default=3, type=int, help='number of channels of the dst images')
+    parser.add_argument('--channels', default=32, type=int, help='channelwidth multiplier')
+    parser.add_argument('--local-num-blocks', default=3, type=int, help='number of residual blocks in the local G')
+    parser.add_argument('--global-num-blocks', default=9, type=int, help='number of residual blocks in the global G')
+    parser.add_argument('--global-num-downs', default=4, type=int, help='number of down-sampling blocks in global G')
+    parser.add_argument('--g-norm-name', default='in', choices=['in', 'bn'], help='normalization layer name for G')
+    parser.add_argument('--g-act-name', default='relu', choices=['relu', 'lrelu'], help='activation layer name for G')
+    parser.add_argument('--d-num-scale', default=3, type=int, help='number of scales to discriminate')
+    parser.add_argument('--d-norm-name', default='in', choices=['in', 'bn'], help='normalization layer name for D')
+    parser.add_argument('--d-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation layer name for D')
+    
+    parser.add_argument('--train-once', default=False, action='store_true', help='train model at once')
+    parser.add_argument('--g-epochs', default=100*2, type=int, help='epochs to train the global G')
+    parser.add_argument('--g-d-scale', default=2, type=int, help='number of scales to discriminate when training global G')
+    parser.add_argument('--l-epochs', default=50*2, type=int, help='epochs to train the local G')
+    parser.add_argument('--l-d-scale', default=3, type=int, help='number of scales to discriminate when training local G')
+    parser.add_argument('--fine-from', default=10, type=int, help='the epoch to start fine tuning on when training local G')
+
+    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--feat-lambda', default=10., type=float, help='lambda for feature matching loss')
+    return parser
+
 
 def main(parser):
 
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
+
     # parameters
     # data
-    dataset_name = 'animeface'
-    image_size = 256
-    batch_size = 16
-    min_year = 2010
-    input_channels = 1
-    target_channels = 3
+    # dataset_name = 'animeface'
+    # image_size = 256
+    # batch_size = 16
+    # min_year = 2010
+    # input_channels = 1
+    # target_channels = 3
 
-    # model
-    channels = 32
-    # G
-    local_num_blocks = 3
-    global_num_blocks = 9
-    global_num_downs = 4
-    g_norm_name = 'in'
-    g_act_name = 'relu'
-    # D
-    d_num_scale = 3
-    d_norm_name = 'in'
-    d_act_name  = 'lrelu'
+    # # model
+    # channels = 32
+    # # G
+    # local_num_blocks = 3
+    # global_num_blocks = 9
+    # global_num_downs = 4
+    # g_norm_name = 'in'
+    # g_act_name = 'relu'
+    # # D
+    # d_num_scale = 3
+    # d_norm_name = 'in'
+    # d_act_name  = 'lrelu'
 
-    # training
-    train_once = False
-    g_epochs = 100 * 2
-    g_d_scale = 2
-    l_epochs = 50 * 2
-    l_d_scale = d_num_scale
-    fine_from = 10
-    lr = 0.0002
-    betas = (0.5, 0.999)
-    feat_lambda = 10
+    # # training
+    # train_once = False
+    # g_epochs = 100 * 2
+    # g_d_scale = 2
+    # l_epochs = 50 * 2
+    # l_d_scale = d_num_scale
+    # fine_from = 10
+    # lr = 0.0002
+    betas = (args.beta1, args.beta2)
+    # feat_lambda = 10
     
-    amp = True
-    device = get_device()
+    amp = not args.disable_amp
+    device = get_device(not args.disable_gpu)
 
     def get_dataset(name, image_size_):
-        if name == 'animeface': return XDoGAnimeFaceDataset(image_size_, min_year)
-        elif name == 'danbooru': return XDoGDanbooruPortraitDataset(image_size)
+        if name == 'animeface': return XDoGAnimeFaceDataset(image_size_, args.min_year)
+        elif name == 'danbooru': return XDoGDanbooruPortraitDataset(image_size_)
         else: raise Exception('no such dataset')
 
     G = Generator(
-        input_channels, target_channels, channels,
-        local_num_blocks, global_num_blocks, global_num_downs,
-        g_norm_name, g_act_name
+        args.input_channels, args.target_channels, args.channels,
+        args.local_num_blocks, args.global_num_blocks, args.global_num_downs,
+        args.g_norm_name, args.g_act_name
     )
     D = Discriminator(
-        input_channels+target_channels, channels, d_num_scale,
-        d_norm_name, d_act_name
+        args.input_channels+args.target_channels, args.channels, args.d_num_scale,
+        args.d_norm_name, args.d_act_name
     )
     G.apply(init_weight_normal)
     D.apply(init_weight_normal)
     G.to(device)
     D.to(device)
 
-    if train_once:
+    if args.train_once:
+        raise Exception('Not Tested')
         # dataset
-        dataset = get_dataset(dataset_name, image_size)
-        dataset = to_loader(dataset, batch_size)
-        max_iter = len(dataset) * g_epochs
+        dataset = get_dataset(args.dataset, args.image_size)
+        dataset = to_loader(dataset, args.batch_size)
+        max_iter = len(dataset) * args.g_epochs
         # optimizer
-        optimizer_G = AdaBelief(G.parameters(), lr=lr, betas=betas)
-        optimizer_D = AdaBelief(D.parameters(), lr=lr, betas=betas)
+        optimizer_G = AdaBelief(G.parameters(), lr=args.lr, betas=betas)
+        optimizer_D = AdaBelief(D.parameters(), lr=args.lr, betas=betas)
         train(
             dataset, max_iter,
             G, D, optimizer_G, optimizer_D,
-            feat_lambda, d_num_scale,
+            args.feat_lambda, args.d_num_scale,
             device, amp, 1000
         )
 
@@ -382,21 +413,21 @@ def main(parser):
         if not os.path.exists('implementations/pix2pixHD/result/global_final.pt'):
             print('This will only train the global generator. Run the same command again to resume the training for the local generator.')
             # dataset
-            dataset = get_dataset(dataset_name, image_size//2)
-            dataset = to_loader(dataset, batch_size)
+            dataset = get_dataset(args.dataset, args.image_size//2)
+            dataset = to_loader(dataset, args.batch_size)
             # optimizer
             # only update global G
-            optimizer_G = AdaBelief(G.global_G.parameters(), lr=lr, betas=betas)
+            optimizer_G = AdaBelief(G.global_G.parameters(), lr=args.lr, betas=betas)
             # only update finest 'g_d_scale' Ds
-            iterables = [D.discriminates[i].parameters() for i in range(g_d_scale)]
-            optimizer_D = AdaBelief(itertools.chain(*iterables), lr=lr, betas=betas)
+            iterables = [D.discriminates[i].parameters() for i in range(args.g_d_scale)]
+            optimizer_D = AdaBelief(itertools.chain(*iterables), lr=args.lr, betas=betas)
 
-            lr_delta = lr / g_epochs / 2
+            lr_delta = args.lr / args.g_epochs / 2
 
             train_global(
-                dataset, g_epochs,
+                dataset, args.g_epochs,
                 D, G, optimizer_D, optimizer_G,
-                feat_lambda, g_d_scale, lr_delta,
+                args.feat_lambda, args.g_d_scale, lr_delta,
                 device, amp, 1000
             )
         else:
@@ -405,18 +436,18 @@ def main(parser):
             G.load_state_dict(state_dict['G'])
             D.load_state_dict(state_dict['D'])
             # dataset
-            dataset = get_dataset(dataset_name, image_size)
-            dataset = to_loader(dataset, batch_size)
+            dataset = get_dataset(args.dataset, args.image_size)
+            dataset = to_loader(dataset, args.batch_size)
             # optimizer
-            optimizer_G = AdaBelief(G.local_G.parameters(), lr=lr, betas=betas)
-            optimizer_D = AdaBelief(D.parameters(), lr=lr, betas=betas)
+            optimizer_G = AdaBelief(G.local_G.parameters(), lr=args.lr, betas=betas)
+            optimizer_D = AdaBelief(D.parameters(), lr=args.lr, betas=betas)
 
-            lr_delta = lr / l_epochs / 2
+            lr_delta = args.lr / args.l_epochs / 2
 
             train_local(
-                dataset, l_epochs,
+                dataset, args.l_epochs,
                 D, G, optimizer_D, optimizer_G,
-                feat_lambda, l_d_scale, lr_delta,
-                fine_from, lr, betas,
+                args.feat_lambda, args.l_d_scale, lr_delta,
+                args.fine_from, args.lr, betas,
                 device, amp, 1000
             )
