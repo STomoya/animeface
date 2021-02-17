@@ -8,6 +8,7 @@ from torchvision.utils import save_image
 import numpy as np
 
 from .model import Generator, Discriminator
+from ..general import save_args
 
 def load_real(
     image_path, device,
@@ -178,61 +179,72 @@ def train(
         img = G.forward(sizes=test)
         save_image(img, './implementations/SinGAN/result/eval_{}x{}.png'.format(*test[-1]), normalize=True, range=(-1, 1))
 
+def add_arguments(parser):
+    parser.add_argument('--image-path', default='./data/animefacedataset/images/63568_2019.jpg', type=str, help='path to image')
+    parser.add_argument('--max-size', default=220, type=int, help='max size when training')
+    parser.add_argument('--min-size', default=25,  type=int, help='min size when training')
+    parser.add_argument('--scale-factor', default=0.7, type=float, help='scaling factor for resing the traning image')
+    parser.add_argument('--save-real', default=False, action='store_true', help='save real samples')
+    parser.add_argument('--img-channels', default=3, type=int, help='image channel size')
+    parser.add_argument('--channels', default=32, type=int, help='channels width multiplier')
+    parser.add_argument('--kernel-size', default=3, type=int, help='kernel size for convolution layers')
+    parser.add_argument('--norm-layer', default='bn', choices=['bn', 'in', 'sn'], help='normalization layer name')
+    parser.add_argument('--num-layers', default=5, type=int, help='number of layers for each scale G')
+    parser.add_argument('--disable-img-out', default=False, action='store_true', help='no tanh() on output of G')
+    parser.add_argument('--disable-bias', default=False, action='store_true', help='do not use bias')
+
+    parser.add_argument('--epochs', default=3000, type=int, help='epochs to train for each scale')
+    parser.add_argument('--increase', default=0, type=int, help='epochs to increase in each scale')
+    parser.add_argument('--G-step', default=3, type=int, help='number of steps for G before updating D')
+    parser.add_argument('--D-step', default=3, type=int, help='number of steps for D before updating G')
+    parser.add_argument('--lr', default=0.0005, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--gp-type', default='one', choices=['one', 'zero'], help='center for gradient penalty')
+    parser.add_argument('--gp-lambda', default=0.1, type=float, help='lambda for gradient penalty')
+    parser.add_argument('--rec-alpha', default=10., type=float, help='alpha for reconstruction loss')
+    parser.add_argument('--test-size', default=500, type=int, help='size of test image')
+    return parser
+
 def main(parser):
 
-    # parameters
-    # data
-    image_path = './data/animefacedataset/images/63568_2019.jpg'
-    # image_path = './SinGAN/sample.jpg'
-    max_size = 220
-    min_size = 25
-    scale_factor = 0.7
-    save_samples = False
-
-    # model
-    img_channels = 3
-    channels = 32
-    kernel_size = 3
-    norm_layer = 'bn'                      # batch normalization
-    # norm_layer = 'in'                      # instance normalization
-    # norm_layer = 'sn'                      # spectral normalization
-    num_layers = 5
-    img_out = True                         # if True nn.Tanh() on output of G
-    bias = True
-
-    # training
-    epochs = 3000
-    increase = 0                           # increase of epochs in each scale
-    G_step = 3
-    D_step = 3
-    lr = 0.0005
-    betas = (0.5, 0.999)
-    gp_type = 'one' if img_out else 'zero' # type of wgan_gp loss. 0-centered or 1-centered
-    gp_lambda = 0.1
-    rec_alpha = 10
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
     
-    # eval
-    test_size = 500
+    img_out = not args.disable_img_out
+    bias = not args.disable_bias
+    betas = (args.beta1, args.beta2)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    reals, sizes = load_real(image_path, device, max_size, min_size, scale_factor, save_samples)
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
+
+    reals, sizes = load_real(
+        args.image_path, device, args.max_size, args.min_size,
+        args.scale_factor, args.save_real)
     # test = test_sizes(test_size, len(sizes), scale_factor)
     test = None
 
-    Gs = Generator(sizes, device, img_channels, channels, kernel_size, norm_layer, num_layers, img_out, bias=bias)
-    Ds = Discriminator(sizes, device, img_channels, channels, kernel_size, norm_layer, num_layers, bias=bias)
+    Gs = Generator(
+        sizes, device, args.img_channels, args.channels,
+        args.kernel_size, args.norm_layer, args.num_layers, img_out, bias=bias)
+    Ds = Discriminator(
+        sizes, device, args.img_channels, args.channels,
+        args.kernel_size, args.norm_layer, args.num_layers, bias=bias)
     Gs.to()
     Ds.to()
 
     rec_criterion = nn.MSELoss()
 
     train(
-        [epochs + scale*increase for scale, _ in enumerate(sizes)], G_step, D_step,
+        [args.epochs + scale*args.increase for scale, _ in enumerate(sizes)], args.G_step, args.D_step,
         Gs, Ds,
         reals, test,
-        lr, betas,
-        rec_criterion, gp_type,
-        gp_lambda, rec_alpha,
+        args.lr, betas,
+        rec_criterion, args.gp_type,
+        args.gp_lambda, args.rec_alpha,
         1000, 1000
     )
