@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
-from ..general import GeneratePairImageDanbooruDataset, to_loader
+from ..general import GeneratePairImageDanbooruDataset, to_loader, save_args
 
 def train(
     epochs,
@@ -120,26 +120,6 @@ def grid(pair, gen_image, target, num_images):
             break
     return torch.cat(images)
 
-
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
-
-def plot_loss(losses):
-    g_losses = losses['g']
-    d_losses = losses['d']
-
-    plt.figure(figsize=(12, 8))
-
-    plt.plot(g_losses)
-    plt.plot(d_losses)
-
-    plt.legend(['generator', 'discriminator'])
-    plt.xlabel('n_iter')
-    plt.ylabel('loss')
-
-    plt.savefig('/usr/src/implementations/pix2pix/curve.png')
-
 from PIL import ImageFilter
 
 class Mozaic(object):
@@ -165,19 +145,25 @@ class GaussianBlur(object):
     def __call__(self, sample):
         return sample.filter(ImageFilter.GaussianBlur(self.radius))
 
+def add_arguments(parser):
+    parser.add_argument('--epochs', default=150, type=int, help='epochs to train')
+    parser.add_argument('--lr', default=0.0005, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--pixelwise-gamma', default=100, type=float, help='gamma for l1 loss')
+    return parser
+
 def main(parser):
 
-    image_size = 256
-    epochs = 100
-    lr = 0.0002
-    betas = (0.5, 0.999)
-    pixelwise_gamma = 100
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    batch_size = 32
+    betas = (args.beta1, args.beta2)
 
     pair_transform = Mozaic(linear_scale=2)
-    dataset = GeneratePairImageDanbooruDataset(pair_transform=pair_transform, image_size=256)
-    dataset = to_loader(dataset, batch_size)
+    dataset = GeneratePairImageDanbooruDataset(pair_transform=pair_transform, image_size=args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
 
     G = Generator()
     D = Discriminator()
@@ -189,14 +175,14 @@ def main(parser):
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=betas)
 
     validity_criterion = nn.MSELoss()
     pixelwise_criterion = nn.L1Loss()
 
     losses = train(
-        epochs=epochs,
+        epochs=args.epochs,
         dataset=dataset,
         G=G,
         optimizer_G=optimizer_G,
@@ -204,10 +190,8 @@ def main(parser):
         optimizer_D=optimizer_D,
         validity_criterion=validity_criterion,
         pixelwise_criterion=pixelwise_criterion,
-        pixelwise_gamma=pixelwise_gamma,
+        pixelwise_gamma=args.pixelwise_gamma,
         device=device,
         verbose_interval=1000,
         save_interval=1000
     )
-
-    plot_loss(losses)
