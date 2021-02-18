@@ -1,0 +1,20 @@
+{
+  "name": "WGAN_gp",
+  "disable_gpu": false,
+  "disable_amp": false,
+  "dataset": "animeface",
+  "image_size": 128,
+  "batch_size": 32,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "epochs": 150,
+  "latent_dim": 200,
+  "lr": 5e-05,
+  "beta1": 0.5,
+  "beta2": 0.999,
+  "n_critic": 5,
+  "gp_gamma": 10.0
+}

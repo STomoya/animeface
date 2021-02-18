@@ -9,7 +9,7 @@ from torch.utils.data import random_split
 from torchvision.utils import save_image
 
 from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import get_device, Status
+from ..general import get_device, Status, save_args
 from ..gan_utils import AdaBelief
 from ..gan_utils.losses import LSGANLoss, HingeLoss
 
@@ -132,84 +132,88 @@ def _image_grid(line, gen, num_images=6):
 
     return torch.cat(images, dim=0)
 
+def add_arguments(parser):
+    parser.add_argument('--line-channels', default=1, type=int, help='number of channels of line art images')
+    parser.add_argument('--rgb-channels', default=3, type=int, help='number of channels of the generated images')
+    parser.add_argument('--test-images', default=6, type=int, help='numbers of images for test')
+
+    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
+    parser.add_argument('--max-channels', default=1024, type=int, help='maximum number of channels')
+    parser.add_argument('--downsample-to', default=32, type=int, help='the resolution to downsample to in G')
+    parser.add_argument('--num-blocks', default=6, type=int, help='number of residual blocks in G')
+    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers per block')
+    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='do not use spectral normalization in G')
+    parser.add_argument('--g-disable-bias', default=False, action='store_true', help='do not use bias in G')
+    parser.add_argument('--g-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name in G')
+    parser.add_argument('--g-act-name', default='relu', choices=['relu', 'lrelu'], help='activation function in G')
+    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
+    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='do not use spectral normalization in D')
+    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='do not use bias in D')
+    parser.add_argument('--d-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name in D')
+    parser.add_argument('--d-act-name', default='relu', choices=['relu', 'lrelu'], help='activation function in D')
+
+    parser.add_argument('--epochs', default=100, type=int, help='epochs to train with constant learning rate')
+    parser.add_argument('--decay-epochs', default=100, type=int, help='epochs to train with a linearly decaying learning rate')
+    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--cycle-lambda', default=10., type=float, help='lambda for cycle consistency loss')
+    return parser
+
 def main(parser):
     
-    # params
-    # data
-    image_size = 256
-    min_year   = 2005
-    num_images = 60000
-    batch_size = 24
-    test_images = 6
-    line_channels = 1
-    rgb_channels  = 3
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    # model
-    channels = 32
-    # generator
-    max_channels = 256
-    downsample_to = 32
-    num_blocks = 6
-    block_num_conv = 2
-    g_use_sn = False
-    g_use_bias = True
-    g_norm_name = 'in'
-    g_act_name = 'relu'
+    # # generator
+    g_use_sn   = not args.g_disable_sn
+    g_use_bias = not args.g_disable_bias
     # discriminator
-    num_layers = 3
-    d_use_sn = True
-    d_use_bias = True
-    d_norm_name = 'in'
-    d_act_name = 'lrelu'
-
-    # training
-    epochs = 100
-    decay_epochs = 100
-    lr = 0.0002
-    betas = (0.5, 0.999)
-    cycle_lambda = 10.
-
-    amp = True
-    device = get_device()
+    d_use_sn   = not args.d_disable_sn
+    d_use_bias = not args.d_disable_bias
+    
+    amp = not args.disable_amp
+    device = get_device(not args.disable_gpu)
 
     # dataset
     # train
-    dataset = XDoGAnimeFaceDataset(image_size, min_year)
-    dataset = XDoGDanbooruPortraitDataset(image_size, num_images=num_images+test_images)
-    dataset, test = random_split(dataset, [len(dataset)-test_images, test_images])
+    dataset = XDoGAnimeFaceDataset(args.image_size, args.min_year)
+    dataset = XDoGDanbooruPortraitDataset(args.image_size, num_images=args.num_images+args.test_images)
+    dataset, test = random_split(dataset, [len(dataset)-args.test_images, args.test_images])
     dataset.dataset.shuffle_xdog()
-    dataset = to_loader(dataset, batch_size)
+    dataset = to_loader(dataset, args.batch_size)
     # test
-    test = to_loader(test, test_images, shuffle=False, use_gpu=False)
+    test = to_loader(test, args.test_images, shuffle=False, use_gpu=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 
-    max_iter = len(dataset) * (epochs + decay_epochs)
-    decay_from = len(dataset) * decay_epochs - 1 # -1 to avoid lr=0.
-    delta = lr / decay_epochs
+    max_iters = len(dataset) * (args.epochs + args.decay_epochs)
+    decay_from = len(dataset) * args.decay_epochs - 1 # -1 to avoid lr=0.
+    delta = args.lr / args.decay_epochs
 
     # models
     # - line2color G
     GC = Generator(
-        image_size, line_channels, rgb_channels, downsample_to,
-        channels, max_channels, num_blocks, block_num_conv,
-        g_use_sn, g_use_bias, g_norm_name, g_act_name
+        args.image_size, args.line_channels, args.rgb_channels, args.downsample_to,
+        args.channels, args.max_channels, args.num_blocks, args.block_num_conv,
+        g_use_sn, g_use_bias, args.g_norm_name, args.g_act_name
     )
     # - color2line G
     GL = Generator(
-        image_size, rgb_channels, line_channels, downsample_to,
-        channels, max_channels, num_blocks, block_num_conv,
-        g_use_sn, g_use_bias, g_norm_name, g_act_name
+        args.image_size, args.rgb_channels, args.line_channels, args.downsample_to,
+        args.channels, args.max_channels, args.num_blocks, args.block_num_conv,
+        g_use_sn, g_use_bias, args.g_norm_name, args.g_act_name
     )
     # - line2color D
     DC = Discriminator(
-        image_size, line_channels+rgb_channels, num_layers,
-        channels, d_norm_name, d_act_name, d_use_sn, d_use_bias
+        args.image_size, args.line_channels+args.rgb_channels, args.num_layers,
+        args.channels, args.d_norm_name, args.d_act_name, d_use_sn, d_use_bias
     )
     # - color2line D
     DL = Discriminator(
-        image_size, line_channels+rgb_channels, num_layers,
-        channels, d_norm_name, d_act_name, d_use_sn, d_use_bias
+        args.image_size, args.line_channels+args.rgb_channels, args.num_layers,
+        args.channels, args.d_norm_name, args.d_act_name, d_use_sn, d_use_bias
     )
     # init
     GC.apply(init_weight_normal)
@@ -223,18 +227,19 @@ def main(parser):
     DL.to(device)
 
     # optimizers
+    betas = (args.beta1, args.beta2)
     optimizer_G = AdaBelief(
         itertools.chain(GC.parameters(), GL.parameters()),
-        lr=lr, betas=betas
+        lr=args.lr, betas=betas
     )
     optimizer_D = AdaBelief(
         itertools.chain(DC.parameters(), DL.parameters()),
-        lr=lr, betas=betas
+        lr=args.lr, betas=betas
     )
 
     train(
-        dataset, max_iter, decay_from, delta,
+        dataset, max_iters, decay_from, delta,
         GC, GL, DC, DL, optimizer_G, optimizer_D,
-        cycle_lambda, test_batch,
+        args.cycle_lambda, test_batch,
         device, amp, 1000
     )

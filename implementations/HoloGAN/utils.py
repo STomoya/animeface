@@ -7,7 +7,7 @@ import numpy as np
 from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
-from ..general import AnimeFaceDataset, to_loader
+from ..general import AnimeFaceDataset, to_loader, save_args
 from ..gan_utils import DiffAugment
 
 def gen_theta(
@@ -199,52 +199,54 @@ def style_criterion(fake_logits, real_logits, style_lambda=1.):
 def identity_criterion(z, z_reconstruct, identity_lambda=1):
     return identity_lambda * ((z_reconstruct - z) ** 2).mean()
 
+def add_arguments(parser):
+    parser.add_argument('--g-channels', default=512, type=int, help='base number of channels in G')
+    parser.add_argument('--d-channels', default=64, type=int, help='base number of channels in D')
+    parser.add_argument('--latent-dim', default=128, type=int, help='dimension of latent')
+    parser.add_argument('--activation', default='lrelu', choices=['relu', 'lrelu'], help='activation function')
+
+    parser.add_argument('--epochs', default=150, type=int, help='epochs to train')
+    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
+    parser.add_argument('--style-lambda', default=1., type=float, help='lambda for style loss')
+    parser.add_argument('--identity-lambda', default=1., type=float, help='lambda for identity loss')
+    parser.add_argument('--eval-size', default=10, type=int, help='number for images for evaluation')
+    return parser
+
 def main(parser):
-    # parameters
-    # data
-    image_size = 128
-    batch_size = 32
 
-    # model
-    g_channels = 512
-    d_channels = 64
-    noise_channels = 128
-    activation = 'lrelu'
-    # activation = 'relu'
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    # training
-    epochs = 150
-    lr = 0.0001
-    betas = (0.5, 0.999)
-    policy = 'color,translation'
-    style_lambda = 1.
-    identity_lambda = 1.
+    betas = (args.beta1, args.beta2)
 
-    # eval
-    eval_size = 10
+    dataset = AnimeFaceDataset(args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
 
+    G = Generator(args.g_channels, args.latent_dim, args.activation)
+    D = Discriminator(args.d_channels, args.latent_dim, args.activation, args.image_size)
 
-    dataset = AnimeFaceDataset(image_size)
-    dataset = to_loader(dataset, batch_size)
-
-    G = Generator(g_channels, noise_channels, activation)
-    D = Discriminator(d_channels, noise_channels, activation, image_size)
-
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
 
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=betas)
 
     gan_criterion = nn.BCEWithLogitsLoss()
     
     train(
-        epochs, batch_size, noise_channels, eval_size,
-        dataset, DiffAugment, policy,
+        args.epochs, args.batch_size, args.latent_dim, args.eval_size,
+        dataset, DiffAugment, args.policy,
         G, D, optimizer_G, optimizer_D,
-        gan_criterion, style_lambda, identity_lambda,
+        gan_criterion, args.style_lambda, args.identity_lambda,
         device,
         1000, 1000
     )

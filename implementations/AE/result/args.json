@@ -1,0 +1,22 @@
+{
+  "name": "AE",
+  "disable_gpu": false,
+  "disable_amp": false,
+  "dataset": "animeface",
+  "image_size": 256,
+  "batch_size": 64,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "enc_dim": 128,
+  "min_size": 8,
+  "num_layers": null,
+  "img_channels": 3,
+  "channels": 64,
+  "norm_name": "bn",
+  "act_name": "relu",
+  "up_mode": "bilinear",
+  "output_act": "tanh"
+}

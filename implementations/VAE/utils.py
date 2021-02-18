@@ -8,7 +8,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
 from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..general import get_device, Status
+from ..general import get_device, Status, save_args
 from ..gan_utils import sample_nnoise, AdaBelief
 
 from .model import VAE, init_weight
@@ -81,56 +81,55 @@ def _image_grid(src, dst, num_images=6):
     
     return torch.cat(images, dim=0)
 
+def add_arguments(parser):
+    parser.add_argument('--image-channels', default=3, type=int, help='number of channels in input images')
+    parser.add_argument('--z-dim', default=256, type=int, help='dimension of extracted feature vector z')
+    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
+    parser.add_argument('--max-channels', default=1024, type=int, help='maximum channels')
+    parser.add_argument('--enc-target-resl', default=4, type=int, help='resolution to dwon-sample to before faltten')
+    parser.add_argument('--disable-bias', default=False, action='store_true', help='do not use bias')
+    parser.add_argument('--norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name')
+    parser.add_argument('--act-name', default='relu', choices=['relu', 'lrelu'], help='activation function name')
+    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
+    parser.add_argument('--beta1', default=0.9, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--test-images', default=16, type=int, help='number of images for evaluation')
+    return parser
 
 def main(parser):
-    
-    # param
-    # data
-    image_size = 256
-    min_year = 2010
-    image_channels = 3
-    batch_size = 64
 
-    # model
-    z_dim = 256
-    channels = 32
-    max_channels = 2 ** 10
-    enc_target_resl = 4
-    use_bias = True
-    norm_name = 'bn'
-    act_name = 'relu'
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    # training
-    max_iter = -1
-    lr = 0.0002
-    betas = (0.9, 0.999)
-    test_num_images = 16
+    use_bias = not args.disable_bias
+    betas = (args.beta1, args.beta2)
 
-    amp = True
-    device = get_device()
+    amp = not args.disable_amp
+    device = get_device(not args.disable_gpu)
 
     # dataset
-    dataset = YearAnimeFaceDataset(image_size, min_year)
-    dataset = to_loader(dataset, batch_size)
+    dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
+    dataset = to_loader(dataset, args.batch_size)
     test_sampler = functools.partial(
-        sample_nnoise, size=(test_num_images, z_dim), device=device
+        sample_nnoise, size=(args.test_images, args.z_dim), device=device
     )
-    if max_iter < 0:
-        max_iter = len(dataset) * 200
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
 
     model = VAE(
-        image_size, z_dim, image_channels,
-        channels, max_channels, enc_target_resl,
-        use_bias, norm_name, act_name
+        args.image_size, args.z_dim, args.image_channels,
+        args.channels, args.max_channels, args.enc_target_resl,
+        use_bias, args.norm_name, args.act_name
     )
     # model.apply(init_weight)
     model.to(device)
 
     # optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr, betas=betas)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr, betas=betas)
     
     train(
-        dataset, max_iter, test_sampler,
+        dataset, args.max_iters, test_sampler,
         model, optimizer,
         device, amp, 1000
     )

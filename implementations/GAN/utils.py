@@ -7,7 +7,7 @@ import numpy as np
 
 from .model import Generator, Discriminator
 
-from ..general import AnimeFaceDataset, to_loader
+from ..general import AnimeFaceDataset, to_loader, save_args
 
 def train(
     epochs,
@@ -70,19 +70,27 @@ def train(
             if batches_done % save_interval == 0:
                 save_image(fake_image.data[:25], "implementations/GAN/result/%d.png" % batches_done, nrow=5, normalize=True)
 
+def add_arguments(parser):
+    parser.add_argument('--epochs', default=10, type=int, help='epochs to train')
+    parser.add_argument('--latent-dim', default=100, type=int, help='dimension of input latent')
+    return parser
+
 def main(parser):
-    batch_size = 32
-    image_size = 128
-    epochs = 10
-    latent_dim = 100
 
-    dataset = AnimeFaceDataset(image_size)
-    dataset = to_loader(dataset, batch_size)
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    G = Generator(latent_dim=latent_dim, image_shape=(3, image_size, image_size))
-    D = Discriminator(image_shape=(3, image_size, image_size))
+    dataset = AnimeFaceDataset(args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    G = Generator(latent_dim=args.latent_dim, image_shape=(3, args.image_size, args.image_size))
+    D = Discriminator(image_shape=(3, args.image_size, args.image_size))
+
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
     G.to(device)
     D.to(device)
 
@@ -92,9 +100,9 @@ def main(parser):
     criterion = nn.BCELoss()
 
     train(
-        epochs=epochs,
+        epochs=args.epochs,
         dataset=dataset,
-        latent_dim=latent_dim,
+        latent_dim=args.latent_dim,
         G=G,
         optimizer_G=optimizer_G,
         D=D,

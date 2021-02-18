@@ -8,7 +8,7 @@ import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
-from ..general import AnimeFaceDataset, to_loader
+from ..general import AnimeFaceDataset, to_loader, save_args
 
 def train(
     epochs,
@@ -91,38 +91,49 @@ def gradient_penalty(D, real_image, fake_image, device):
 
     return penalty
 
+def add_arguments(parser):
+    parser.add_argument('--epochs', default=150, type=int, help='epochs to train')
+    parser.add_argument('--latent-dim', default=200, type=int, help='dimension of input latent')
+    parser.add_argument('--lr', default=5e-5, type=float, help='learning rate for both generator and discriminator')
+    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
+    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
+    parser.add_argument('--n-critic', default=5, type=int, help='train G only each "--n-critic" step')
+    parser.add_argument('--gp-gamma', default=10., type=float, help='gamma for gradient penalty')
+    return parser
+
 def main(parser):
-    batch_size = 32
-    image_size = 128
-    epochs = 150
-    latent_dim = 200
-    lr = 2.e-4
-    betas = (0.5, 0.999)
-    n_critic = 5
-    gp_gamma = 10
 
-    dataset = AnimeFaceDataset(image_size)
-    dataset = to_loader(dataset, batch_size)
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+    save_args(args)
 
-    G = Generator(latent_dim=latent_dim)
+    betas = (args.beta1, args.beta2)
+
+    dataset = AnimeFaceDataset(args.image_size)
+    dataset = to_loader(dataset, args.batch_size)
+
+    G = Generator(latent_dim=args.latent_dim)
     D = Discriminator()
 
     G.apply(weights_init_normal)
     D.apply(weights_init_normal)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if not args.disable_gpu:
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    else:
+        device = torch.device('cpu')
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=betas)
 
     train(
-        epochs=epochs,
-        n_critic=n_critic,
-        gp_gamma=gp_gamma,
+        epochs=args.epochs,
+        n_critic=args.n_critic,
+        gp_gamma=args.gp_gamma,
         dataset=dataset,
-        latent_dim=latent_dim,
+        latent_dim=args.latent_dim,
         G=G,
         optimizer_G=optimizer_G,
         D=D,
