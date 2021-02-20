@@ -33,6 +33,11 @@ class MLP(nn.Module):
         return self.fc(x)
 
 class Attention(nn.Module):
+    '''Multi-Head Attention
+    [code from] : https://github.com/VITA-Group/TransGAN/blob/master/models/ViT_8_8.py#L49-L75
+    [modification]
+        - no matmul class
+    '''
     def __init__(self,
         dim, num_heads=8, bias=False, attn_dropout=0., proj_dropout=0.
     ):
@@ -48,7 +53,7 @@ class Attention(nn.Module):
     def forward(self, x):
         B, N, C = x.size()
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.split(1)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
         attn = q @ k.transpose(-2, -1) * self.scale
         attn = attn.softmax(dim=-1)
@@ -218,6 +223,15 @@ class Discriminator(nn.Module):
         x = x[:, -1, :]
         x = self.head(x)
         return x
+
+def init_weight_normal(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        m.weight.data.normal_(0, 0.02)
+        if not m.bias == None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, nn.LayerNorm):
+        m.weight.data.fill_(1.)
+        m.bias.data.fill_(0)
 
 if __name__=='__main__':
     g = Generator([5, 2, 2], 128, embed_dim=1024)
