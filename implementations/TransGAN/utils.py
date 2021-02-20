@@ -90,14 +90,16 @@ def train(
                 with torch.no_grad():
                     if G_ema is not None:
                         images = G_ema(const_z)
+                        state_dict = G_ema.state_dict()
                     else:
                         G.eval()
                         images = G(const_z)
                         G.train()
+                        state_dict = G.state_dict()
                 save_image(
                     images, f'implementations/TransGAN/result/{status.batches_done}.jpg',
                     nrow=4, normalize=True, range=(-1, 1))
-                torch.save(G.state_dict(), f'implementations/TransGAN/result/G_{status.batches_done}.pt')
+                torch.save(state_dict, f'implementations/TransGAN/result/G_{status.batches_done}.pt')
             save_image(fake, f'./running.jpg', nrow=4, normalize=True, range=(-1, 1))
 
             # updates
@@ -175,6 +177,11 @@ def main(parser):
     const_z = sample_nnoise((16, args.latent_dim), device=device)
 
     # models
+    expected_g_depths_len = Generator.depths_len_from_target_width(args.image_size, args.bottom_width)
+    assert expected_g_depths_len == len(args.g_depths), \
+          f'Expected number of args for "--g-depths" for your setting is {expected_g_depths_len}. ' \
+        + f'You have {len(args.g_depths)}.'
+    
     G = Generator(
         args.g_depths, args.latent_dim, args.image_channels,
         args.bottom_width, args.g_embed_dim, args.g_num_heads,
