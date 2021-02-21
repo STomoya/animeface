@@ -54,6 +54,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1812.04948) | [code](https://github.com/NVlabs/stylegan)
 - style-based GAN 2 (StyleGAN2).  
     [paper](https://arxiv.org/abs/1912.04958) | [code](https://github.com/NVlabs/stylegan2)
+- Transformer-based GAN (TransGAN).  
+    [paper](https://arxiv.org/abs/2102.07074) | [code](https://github.com/VITA-Group/TransGAN)
 - unsupervised GAN with adaptive layer-instance normalization (UGATIT).  
     [paper](https://arxiv.org/abs/1907.10830) | [code](https://github.com/taki0112/UGATIT)
 - Wasserstein GAN (WGAN).  
