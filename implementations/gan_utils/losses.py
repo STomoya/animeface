@@ -4,7 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import grad, Variable
 from torch.cuda.amp import autocast, GradScaler
-
+from torchvision import models
+import torchvision.transforms.functional as TF
 
 '''
 Base
@@ -273,3 +274,132 @@ class GradPenalty(Loss):
 
     def r2_regularizer(self, fake, D, scaler=None):
         return self.r1_regularizer(fake, D, scaler)
+
+'''VGG'''
+
+class VGG(nn.Module):
+    '''VGG with only feature layers'''
+    def __init__(self, layers=16, pretrained=True):
+        super().__init__()
+        assert layers in [16, 19], 'only supports VGG16 and VGG19'
+        if layers == 16:
+            vgg_pretrained_features = models.vgg16(pretrained=pretrained).features
+            slices = [4, 9, 16, 23, 30]
+        if layers == 19:
+            vgg_pretrained_features = models.vgg19(pretrained=pretrained).features
+            slices = [4, 9, 18, 27, 36]
+        self.slice1 = nn.Sequential()
+        self.slice2 = nn.Sequential()
+        self.slice3 = nn.Sequential()
+        self.slice4 = nn.Sequential()
+        self.slice5 = nn.Sequential()
+        for x in range(slices[0]):
+            self.slice1.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(slices[0], slices[1]):
+            self.slice2.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(slices[1], slices[2]):
+            self.slice3.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(slices[2], slices[3]):
+            self.slice4.add_module(str(x), vgg_pretrained_features[x])
+        for x in range(slices[3], slices[4]):
+            self.slice5.add_module(str(x), vgg_pretrained_features[x])
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, X):
+        h = self.slice1(X)
+        h_relu1 = h
+        h = self.slice2(h)
+        h_relu2 = h
+        h = self.slice3(h)
+        h_relu3 = h
+        h = self.slice4(h)
+        h_relu4 = h
+        h = self.slice5(h)
+        h_relu5 = h
+        return h_relu1, h_relu2, h_relu3, h_relu4, h_relu5
+
+def gram_matrix(x):
+    B, C, H, W = x.size()
+    feat = x.reshape(B, C, H*W)
+    G = torch.bmm(feat, feat.permute(0, 2, 1))
+    return G.div(C*H*W)
+
+class VGGLoss(Loss):
+    '''Losses using vgg'''
+    _content_index = 2
+    _style_indices = [0, 1, 2, 3]
+    _perceptual_indices = [0, 1, 2, 3, 4]
+    def __init__(self, device, normalized=True, vgg=16, backward=False, return_all=False):
+        super().__init__(backward, return_all)
+        self.normalized = normalized
+        self.vgg = VGG(vgg, pretrained=True)
+        self.vgg.to(device)
+    
+    def normalize(self, x):
+        '''normalize input tensor'''
+        return TF.normalize(x, 0.5, 0.5)
+    
+    def style_loss(self, real, fake):
+        '''style loss introduced in
+        "Perceptual Losses for Real-Time Style Transfer and Super-Resolution",
+        Justin Johnson, Alexandre Alahi, and Li Fei-Fei
+        '''
+        if not self.normalized:
+            real, fake = self.normalize(real), self.normalize(fake)
+        loss = 0
+        real_acts = self.vgg(real)
+        fake_acts = self.vgg(fake)
+        for index in self._style_indices:
+            loss = loss \
+                + F.mse_loss(
+                    gram_matrix(fake_acts[index]),
+                    gram_matrix(real_acts[index])
+                )
+        if self.backward:
+            loss.backward(retain_graph=True)
+        
+        return loss
+    
+    def content_loss(self, real, fake):
+        '''content loss intruduced in
+        "Perceptual Losses for Real-Time Style Transfer and Super-Resolution",
+        Justin Johnson, Alexandre Alahi, and Li Fei-Fei
+        '''
+        if not self.normalized:
+            real, fake = self.normalize(real), self.normalize(fake)
+        loss = 0
+        real_acts = self.vgg(real)
+        fake_acts = self.vgg(fake)
+
+        loss = F.mse_loss(
+            fake_acts[self._content_index],
+            real_acts[self._content_index]    
+        )
+
+        if self.backward:
+            loss.backward(retain_graph=True)
+        
+        return loss
+
+    def perceptual_loss(self, real, fake):
+        '''perceptual loss used in pix2pixHD.
+        They seem to use the activations of all convolution blocks,
+        and calculates the distance with L1,
+        different from using only 4 blocks and L2 in style loss and content loss.
+        '''
+        if not self.normalized:
+            real, fake = self.normalize(real), self.normalize(fake)
+        loss = 0
+        real_acts = self.vgg(real)
+        fake_acts = self.vgg(fake)
+
+        for index in self._perceptual_indices:
+            loss = loss + F.l1_loss(
+                real_acts[index], fake_acts[index]
+            )
+        
+        if self.backward:
+            loss.backward(retain_graph=True)
+        
+        return loss
