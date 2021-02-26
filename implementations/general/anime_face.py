@@ -30,6 +30,7 @@ class YearAnimeFaceDataset(AnimeFaceDataset):
     def __init__(self, image_size, min_year=2005, transform=None):
         super().__init__(image_size, transform)
         self.images = [path for path in self.images if self._year_from_path(path) >= min_year]
+        self.length = len(self.images)
     
     def _year_from_path(self, path):
         name, _ = os.path.splitext(os.path.basename(path))
