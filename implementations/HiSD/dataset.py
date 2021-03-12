@@ -5,7 +5,7 @@ Dataset with multiple categories
 import os
 import csv
 
-from ..general.dataset_base import Image, ImageLabel, make_default_transform
+from ..general.dataset_base import Image, make_default_transform
 from ..general import to_loader
 
 def _read_csv(filename):
@@ -49,6 +49,7 @@ class Category:
             for images in image_paths
         ]
         self.iterable = [iter(loader) for loader in self.loaders]
+
         self.tags = unique_labels
         self.num_tags = len(unique_labels)
         self.length = sum([len(images) for images in image_paths])
@@ -57,9 +58,9 @@ class Category:
         try:
             return next(self.iterable[j])
         except StopIteration as si:
-            self.iterable[i] = None
-            self.iterable[i] = iter(self.loaders[i])
-            return next(self.iterable[i])
+            self.iterable[j] = None
+            self.iterable[j] = iter(self.loaders[j])
+            return next(self.iterable[j])
         else:
             raise
 
@@ -138,7 +139,6 @@ class DanbooruPortrait(_CategoricalInfiniteLoader):
     ):
         root = '/usr/src/data/danbooru/portraits'
         super().__init__(
-            root, image_size, 1.2, batch_size,
-            shuffle, num_workers, pin_memory,
-            image_dataset_class
+            root, image_size, 1.2, batch_size, num_workers,
+            transform, image_dataset_class
         )
