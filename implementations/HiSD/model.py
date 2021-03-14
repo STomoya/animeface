@@ -454,7 +454,7 @@ class Discriminator(nn.Module):
         self.single_path = single_path
         self.ret_feat = ret_feat
         if single_path:
-            tags = ['foo']
+            tags = [1]
         self.num_category = len(tags)
 
         ochannels = channels
@@ -491,7 +491,7 @@ class Discriminator(nn.Module):
     
     def forward(self, x, i, j):
         if self.single_path:
-            i = 0
+            i, j = 0, 0
         assert 0 <= i < self.num_category
 
         outs = []
