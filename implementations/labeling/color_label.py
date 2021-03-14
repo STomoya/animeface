@@ -12,16 +12,16 @@ import numpy as np
 Tags:
 hair color
 ['blonde hair', 'brown hair', 'black hair', 'blue hair', 'pink hair', 'purple hair',
- 'green hair', 'red hair', 'silver hair', 'white hair', 'orange hair', 'aqua hair', 'grey hair']
+ 'green hair', 'red hair', 'silver hair']
 eye color
 ['blue eyes', 'red eyes', 'brown eyes', 'green eyes', 'purple eyes',
- 'yellow eyes', 'pink eyes', 'aqua eyes', 'black eyes', 'orange eyes']
+ 'yellow eyes', 'pink eyes']
 '''
 
-HAIR_TAGS = ['blonde hair', 'brown hair', 'black hair', 'blue hair', 'pink hair', 'purple hair',
-    'green hair', 'red hair', 'silver hair', 'white hair', 'orange hair', 'aqua hair', 'grey hair']
+HAIR_TAGS = ['blonde hair', 'brown hair', 'black hair', 'blue hair',
+    'pink hair', 'purple hair', 'green hair', 'red hair', 'silver hair']
 EYE_TAGS  = ['blue eyes', 'red eyes', 'brown eyes', 'green eyes', 'purple eyes',
-    'yellow eyes', 'pink eyes', 'aqua eyes', 'black eyes', 'orange eyes']
+    'yellow eyes', 'pink eyes']
 GLASS_TAG = ['glasses']
 
 def get_model():

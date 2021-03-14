@@ -3,15 +3,15 @@
 
 ## `label.py`
 
-    Labeling images for conditional models.
-    I labeled the images by using [illustration2vec](https://github.com/rezoo/illustration2vec) [1].  
-    I used the tags that are introduced in the work by Yanghua Jin et al [2] for the categories to give for each image.
+Labeling images for conditional models.
+I labeled the images by using [illustration2vec](https://github.com/rezoo/illustration2vec) [1].  
+I used the tags that are introduced in the work by Yanghua Jin et al [2] for the categories to give for each image.
 
 ## `color_label.py`
 
-    Labeling images for HiSD using [1].
-    Three categories (i.e. hair color, eye color and w/wo glasses)
-    No overlap.
+Labeling images for HiSD using [1].
+Three categories (i.e. hair color, eye color and w/wo glasses)
+No overlap.
 
 ## Reference
 
