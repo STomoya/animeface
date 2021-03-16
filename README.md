@@ -38,6 +38,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1705.07215) | [code](https://github.com/kodalinaveen3/DRAGAN)
 - generative adversarial networks (GAN).  
     [paper](https://arxiv.org/abs/1406.2661)
+- Image-to-image Translation via Hierarchical Style Disentanglement (HiSD)  
+    [paper](https://arxiv.org/abs/2103.01456) | [code](https://github.com/imlixinyang/HiSD)
 - Hologram(?) GAN (HoloGAN).  
     [paper](https://arxiv.org/abs/1904.01326) | [code](https://github.com/thunguyenphuoc/HoloGAN)
 - progressive growing of GANs (PGGAN).  
