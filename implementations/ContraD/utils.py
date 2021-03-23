@@ -216,7 +216,7 @@ def add_argument(parser):
     parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
 
     # contra D args
-    parser.add_argument('--augmentation', default='simclr', choices=['simclr', 'diff'], help='augmentation to perform')
+    parser.add_argument('--augmentation', default='diff', choices=['simclr', 'diff'], help='augmentation to perform')
     parser.add_argument('--projection-features', default=256, type=int, help='output feature dimensions for projection')
     parser.add_argument('--hidden-features', default=256, type=int, help='dimensions for hidden layers')
     parser.add_argument('--d-act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function for D')
