@@ -367,15 +367,16 @@ class VGGLoss(Loss):
         if not self.normalized:
             real, fake = self.normalize(real), self.normalize(fake)
         loss = 0
-        real_acts = self.vgg(real)
-        fake_acts = self.vgg(fake)
-        for index in block_indices:
-            loss = loss \
-                + self.loss_fn(
-                    gram_matrix(fake_acts[index]),
-                    gram_matrix(real_acts[index]),
-                    p
-                )
+        with autocast(False):
+            real_acts = self.vgg(real.float())
+            fake_acts = self.vgg(fake.float())
+            for index in block_indices:
+                loss = loss \
+                    + self.loss_fn(
+                        gram_matrix(fake_acts[index]),
+                        gram_matrix(real_acts[index]),
+                        p
+                    )
         if self.backward:
             loss.backward(retain_graph=True)
         
