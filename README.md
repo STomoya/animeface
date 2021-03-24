@@ -32,6 +32,8 @@ deep models for anime images.
     [paper](https://arxiv.org/abs/1809.11096) | [code](https://github.com/ajbrock/BigGAN-PyTorch)
 - conditional GAN (cGAN).  
     [paper](https://arxiv.org/abs/1411.1784)
+- Contrastive Discriminator (ContraD).  
+    [paper](https://openreview.net/forum?id=eo6U4CAwVmg) | [code](https://github.com/jh-jeong/ContraD)
 - deep convolutional GAN (DCGAN).  
     [paper](https://arxiv.org/abs/1511.06434)
 - deep regret analytic GAN (DRAGAN).  
