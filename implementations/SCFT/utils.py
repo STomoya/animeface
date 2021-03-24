@@ -56,10 +56,10 @@ def train(
                 real = color_augment(real)
                 real_s = spatial_augment(real)
                 # D(real)
-                real_prob, _ = D(real)
+                real_prob, _ = D(torch.cat([sketch, real], dim=1))
                 # D(G(sketch, Is))
                 fake, qk_p = G(sketch, real_s, True)
-                fake_prob, _ = D(fake.detach())
+                fake_prob, _ = D(torch.cat([sketch, fake.detach()], dim=1))
                 # D(G(sketch, Ir))
                 _, qk_n = G(sketch, real, True)
 
@@ -77,7 +77,7 @@ def train(
             '''Generator'''
             with autocast(amp):
                 # D(G(sketch, Is))
-                fake_prob, _ = D(fake)
+                fake_prob, _ = D(torch.cat([sketch, fake], dim=1))
 
                 # loss
                 # adv
@@ -204,7 +204,7 @@ def main(parser):
         not args.disable_sn, not args.disable_bias, args.enable_scft_bias, args.norm_name, args.act_name
     )
     D = Discriminator(
-        args.image_size, args.ref_channels, args.num_layers, args.d_channels,
+        args.image_size, args.sketch_channels+args.ref_channels, args.num_layers, args.d_channels,
         not args.disable_sn, not args.disable_bias, args.norm_name, args.act_name
     )
     G.apply(init_weight_N002)
