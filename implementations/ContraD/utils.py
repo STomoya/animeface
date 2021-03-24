@@ -89,8 +89,7 @@ class GradPenalty_(GradPenalty):
 def train(
     max_iters, dataset, sampler, latent_dim, const_z,
     G, G_ema, D, optimizer_G, optimizer_D,
-    r1_lambda, d_k,
-    con_lambda, dis_lambda, temperature,
+    r1_lambda, con_lambda, dis_lambda, temperature,
     augment_r, augment_f,
     device, amp, save
 ):
@@ -121,21 +120,15 @@ def train(
                 fake_prob, _,          proj_supcon_f   = D(fake.detach())
 
                 # loss
-                if status.batches_done % d_k == 0 \
-                    and r1_lambda > 0 \
-                    and status.batches_done is not 0:
-                    # lazy regularization
-                    r1 = gp.r1_regularizer(real, D, scaler)
-                    D_loss = r1 * r1_lambda * d_k
-                else:
-                    # gan loss on other iter
-                    D_loss = loss.d_loss(real_prob, fake_prob) * dis_lambda
-                    D_loss = D_loss + nt_xent_loss(
-                        proj_con_1, proj_con_2, temperature
-                    )
-                    D_loss = D_loss + supervised_contrastive_loss(
-                        proj_supcon_r_1, proj_supcon_r_2, proj_supcon_f, temperature
-                    ) * con_lambda
+                # no lazy regularization
+                r1 = gp.r1_regularizer(real, D, scaler) * r1_lambda
+                D_loss = loss.d_loss(real_prob, fake_prob) * dis_lambda + r1
+                D_loss = D_loss + nt_xent_loss(
+                    proj_con_1, proj_con_2, temperature
+                )
+                D_loss = D_loss + supervised_contrastive_loss(
+                    proj_supcon_r_1, proj_supcon_r_2, proj_supcon_f, temperature
+                ) * con_lambda
             
             if scaler is not None:
                 scaler.scale(D_loss).backward()
@@ -210,7 +203,7 @@ def add_argument(parser):
     parser.add_argument('--beta1', default=0., type=float, help='beta1')
     parser.add_argument('--beta2', default=0.99, type=float, help='beta2')
     # parser.add_argument('--g-k', default=8, type=int, help='for lazy regularization. calculate perceptual path length loss every g_k iters')
-    parser.add_argument('--d-k', default=16, type=int, help='for lazy regularization. calculate gradient penalty each d_k iters')
+    # parser.add_argument('--d-k', default=16, type=int, help='for lazy regularization. calculate gradient penalty each d_k iters')
     parser.add_argument('--r1-lambda', default=0.5, type=float, help='lambda for r1')
     # parser.add_argument('--pl-lambda', default=0., type=float, help='lambda for perceptual path length loss')
     parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
@@ -325,11 +318,7 @@ def main(parser):
     # optimizer
     betas = (args.beta1, args.beta2)
     g_lr, g_betas = args.lr, betas
-    if args.r1_lambda > 0:
-        d_ratio = args.d_k / (args.d_k + 1)
-        d_lr = args.lr * d_ratio
-        d_betas = (betas[0]**d_ratio, betas[1]**d_ratio)
-    else: d_lr, d_betas = args.lr, betas
+    d_lr, d_betas = args.lr, betas
     
     optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=g_betas)
     optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=d_betas)
@@ -357,7 +346,6 @@ def main(parser):
     train(
         args.max_iters, dataset, sampler, args.style_dim, const_z,
         G, G_ema, D, optimizer_G, optimizer_D,
-        args.r1_lambda, args.d_k,
-        args.con_lambda, args.dis_lambda, args.temperature,
+        args.r1_lambda, args.con_lambda, args.dis_lambda, args.temperature,
         augment_r, augment_f, device, amp, args.save
     )
