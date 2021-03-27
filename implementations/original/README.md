@@ -16,7 +16,7 @@ Original models.
 
         Same results can be obtained without the use of this module.  
         It maps colors that are not contained in the original image.  
-        Maybe there are more suitable tasks than colorization.
+        Maybe there are more suitable tasks than colorization. (Originally is for denoising)
 
 - SEBigGAN
 
