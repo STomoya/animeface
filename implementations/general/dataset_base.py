@@ -4,6 +4,7 @@ import csv
 
 import torch
 import torchvision.transforms as T
+import torchvision.transforms.functional as TF
 import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image as pilImage
@@ -53,6 +54,44 @@ class Image(Dataset, _common_attr):
         image = self.transform(image)
 
         return image
+
+class LRHR(Dataset, _common_attr):
+    '''Low Resolution, High Resolution dataset base class
+    '''
+    def __init__(self, image_size, scale=2, resize_ratio=1.):
+        self.images = self._load()
+        self.length = len(self.images)
+        self.image_size = image_size
+        self.resize_ratio = resize_ratio
+        self.scale = scale
+    
+    def __getitem__(self, index):
+        image = self.images[index]
+
+        image = pilImage.open(image).convert('RGB')
+        lr, sr = self.transform(image)
+
+        return lr, sr
+
+    def transform(self, img):
+        return self._default_transform(img)
+
+    def _default_transform(self, img):
+        lr_size = self.image_size // self.scale
+        sr = TF.resize(img, int(self.image_size*self.resize_ratio))
+        sr = TF.center_crop(sr, self.image_size)
+        lr = TF.resize(img, int(lr_size*self.resize_ratio))
+        lr = TF.center_crop(lr, lr_size)
+
+        if random.random() > 0.5:
+            sr = TF.hflip(sr)
+            lr = TF.hflip(lr)
+
+        sr = TF.to_tensor(sr)
+        sr = TF.normalize(sr, 0.5, 0.5)
+        lr = TF.to_tensor(lr)
+        lr = TF.normalize(lr, 0.5, 0.5)
+        return lr, sr
 
 class ImageXDoG(Dataset, _common_attr):
     '''Image + XDoG dataset base class

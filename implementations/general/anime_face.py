@@ -2,15 +2,9 @@
 import os
 import csv
 import glob
+from collections.abc import Callable
 
-import torch
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as T
-from PIL import Image as pilImage
-import numpy as np
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
-
-from .dataset_base import Image, ImageXDoG, ImageLabel, ImageOnehot
+from .dataset_base import Image, ImageXDoG, ImageLabel, ImageOnehot, LRHR
 from .dataset_base import make_default_transform
 
 class AnimeFaceDataset(Image):
@@ -36,6 +30,18 @@ class YearAnimeFaceDataset(AnimeFaceDataset):
         name, _ = os.path.splitext(os.path.basename(path))
         year = int(name.split('_')[-1])
         return year
+
+class AnimeFaceSRDataset(LRHR):
+    def __init__(self, image_size, scale=2, transform=None):
+        if image_size > 128:
+            import warnings
+            warnings.warn('animeface dataset image size is small. you should use danbooru dataset for super-resolution tasks')
+        super().__init__(image_size, scale)
+        if isinstance(transform, Callable):
+            self.transform = transform
+    
+    def _load(self):
+        return glob.glob('/usr/src/data/animefacedataset/images/*')
 
 class XDoGAnimeFaceDataset(ImageXDoG):
     '''Image + XDoG Anime Face Dataset

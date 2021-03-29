@@ -1,7 +1,7 @@
 
-from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset, XDoGAnimeFaceDataset
-from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset
-from .danbooru_portrait import DanbooruPortraitDataset, XDoGDanbooruPortraitDataset
+from .anime_face import AnimeFaceDataset, LabeledAnimeFaceDataset, OneHotLabeledAnimeFaceDataset, YearAnimeFaceDataset, XDoGAnimeFaceDataset, AnimeFaceSRDataset
+from .danbooru import DanbooruDataset, GeneratePairImageDanbooruDataset, DanbooruSRDataset
+from .danbooru_portrait import DanbooruPortraitDataset, XDoGDanbooruPortraitDataset, DanbooruPortraitSRDataset
 from .utils import get_device, Status
 from .arg_utils import save_args
 
