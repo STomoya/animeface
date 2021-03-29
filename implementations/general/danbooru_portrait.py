@@ -31,6 +31,7 @@ class XDoGDanbooruPortraitDataset(ImageXDoG):
             assert 0 < num_images <= len(self.images) and isinstance(num_images, int)
             random.shuffle(self.images)
             self.images = self.images[:num_images]
+            self.length = len(self.images)
             self.xdogs = [path.replace('portraits/portraits', 'portraits/xdog') for path in self.images]
 
     def _load(self):
