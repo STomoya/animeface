@@ -49,7 +49,7 @@ def train(
                 D_loss = 0
                 for real_out, fake_out in zip(real_outs, fake_outs):
                     D_loss = D_loss \
-                        + loss.d_loss(real_out[0], fake_out[0])
+                        + loss.d_loss((real_out[0] - fake_out[0].mean()), (fake_out[0] - real_out[0].mean()))
                 
             if scaler is not None:
                 scaler.scale(D_loss).backward()
@@ -69,7 +69,7 @@ def train(
                 G_loss = vgg.content_loss(hr, fake) * vgg_lambda
                 for fake_out, real_out in zip(fake_outs, real_outs):
                     G_loss = G_loss \
-                        + loss.g_loss(fake_out[0]) * adv_lambda
+                        + loss.g_loss(fake_out[0] - real_out[0].mean()) * adv_lambda
             
             if scaler is not None:
                 scaler.scale(G_loss).backward()
