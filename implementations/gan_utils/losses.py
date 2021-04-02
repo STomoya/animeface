@@ -305,6 +305,7 @@ class VGG(nn.Module):
             self.slice5.add_module(str(x), vgg_pretrained_features[x])
         for param in self.parameters():
             param.requires_grad = False
+        self.eval()
 
     def forward(self, X):
         h = self.slice1(X)
