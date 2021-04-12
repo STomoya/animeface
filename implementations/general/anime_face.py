@@ -4,7 +4,7 @@ import csv
 import glob
 from collections.abc import Callable
 
-from .dataset_base import Image, ImageXDoG, ImageLabel, ImageOnehot, LRHR
+from .dataset_base import Image, ImageImage, ImageXDoG, ImageLabel, ImageOnehot, LRHR
 from .dataset_base import make_default_transform
 
 class AnimeFaceDataset(Image):
@@ -17,6 +17,25 @@ class AnimeFaceDataset(Image):
 
     def _load(self):
         return glob.glob('/usr/src/data/animefacedataset/images/*')
+
+class AnimeFaceCelebADataset(ImageImage):
+    def __init__(self, image_size, min_year=2005, transform=None):
+        self.min_year = min_year
+        if transform is None:
+            transform = make_default_transform(image_size)
+        super().__init__(transform)
+    
+    def _load(self):
+        images = glob.glob('/usr/src/data/animefacedataset/images/*')
+        celeba = glob.glob('/usr/src/data/celeba/img_align_celeba/*')
+        images = [path for path in images if self._year_from_path(path) >= self.min_year]
+        length = min(len(images), len(celeba))
+        return images[:length], celeba[:length]
+
+    def _year_from_path(self, path):
+        name, _ = os.path.splitext(os.path.basename(path))
+        year = int(name.split('_')[-1])
+        return year
 
 class YearAnimeFaceDataset(AnimeFaceDataset):
     '''AnimeFaceDataset with minimum year option
