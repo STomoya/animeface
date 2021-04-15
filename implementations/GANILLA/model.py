@@ -36,6 +36,7 @@ class Block(nn.Module):
             nn.ReflectionPad2d(1),
             Conv2d(sn, in_channels, out_channels, 3, stride, bias=bias),
             get_normalization(norm_name, out_channels),
+            get_activation(act_name),
             nn.ReflectionPad2d(1),
             Conv2d(sn, out_channels, out_channels, 3, bias=bias),
             get_normalization(norm_name, out_channels)
@@ -123,7 +124,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self,
         image_size, out_channels=3, bottom_width=8, num_ups=None,
-        num_feats=3, channels=32, layer_num_blocks=2,
+        num_feats=3, channels=32, hid_channels=128, layer_num_blocks=2,
         sn=True, bias=True, norm_name='in', act_name='lrelu'
     ):
         super().__init__()
@@ -134,7 +135,7 @@ class Decoder(nn.Module):
         # input
         self.input = nn.Sequential(
             nn.ReflectionPad2d(1),
-            Conv2d(sn, channels, channels//2, 3, bias=bias)
+            Conv2d(sn, channels, hid_channels, 3, bias=bias)
         )
 
         convs = []
@@ -144,28 +145,26 @@ class Decoder(nn.Module):
             convs.append(
                 nn.Sequential(
                     nn.ReflectionPad2d(1),
-                    Conv2d(sn, channels, channels//2, 3, bias=bias)))
+                    Conv2d(sn, channels, hid_channels, 3, bias=bias)))
         self.convs = nn.ModuleList(convs)
         # upsampling
         self.upsample = nn.Upsample(scale_factor=2)
 
         # additional upsamples
-        if num_ups != num_feats:
+        if num_ups-1 != num_feats:
             add_ups = num_ups - num_feats - 1
             ups = []
             for _ in range(add_ups):
-                channels = channels // 2
                 ups.append(
                     nn.Sequential(
                         nn.ReflectionPad2d(1),
-                        Conv2d(sn, channels, channels//2, 3, bias=bias)))
+                        Conv2d(sn, hid_channels, hid_channels, 3, bias=bias)))
             self.ups = nn.ModuleList(ups)
 
-        channels = channels // 2
         # output
         self.output = nn.Sequential(
             nn.ReflectionPad2d(3),
-            Conv2d(sn, channels, out_channels, 7, bias=bias),
+            Conv2d(sn, hid_channels, out_channels, 7, bias=bias),
             get_activation('tanh')
         )
 
@@ -173,8 +172,8 @@ class Decoder(nn.Module):
         x = self.input(x)
         x = self.upsample(x)
         for module, feat in zip(self.convs, feats[::-1]):
+            feat = module(feat)
             x = x + feat
-            x = module(x)
             x = self.upsample(x)
         if hasattr(self, 'ups'):
             for module in self.ups:
@@ -185,7 +184,7 @@ class Decoder(nn.Module):
 class Generator(nn.Module):
     def __init__(self,
         image_size, image_channels=3, bottom_width=8, num_downs=None,
-        num_feats=3, channels=32, layer_num_blocks=2,
+        num_feats=3, channels=32, hid_channels=128, layer_num_blocks=2,
         sn=True, bias=True, norm_name='in', act_name='lrelu'
     ):
         super().__init__()
@@ -197,7 +196,7 @@ class Generator(nn.Module):
         )
         self.decoder = Decoder(
             image_size, image_channels, bottom_width,
-            num_downs, num_feats, channels, layer_num_blocks,
+            num_downs, num_feats, channels, hid_channels, layer_num_blocks,
             sn, bias, norm_name, act_name
         )
 

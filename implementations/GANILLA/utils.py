@@ -130,6 +130,7 @@ def add_arguments(parser):
     parser.add_argument('--num-downs', default=None, type=int, help='number of down/up sampling')
     parser.add_argument('--num-feats', default=3, type=int, help='number of features to return from the encoder')
     parser.add_argument('--g-channels', default=32, type=int, help='channel width multiplier for G')
+    parser.add_argument('--hid-channels', default=128, type=int, help='channels in decoder')
     parser.add_argument('--layer-num-blocks', default=2, type=int, help='number of blocks in one GANILLA layer')
     parser.add_argument('--g-disable-sn', default=False, action='store_true', help='disable spectral norm in G')
     parser.add_argument('--g-bias', default=False, action='store_true', help='enable bias in G')
@@ -175,13 +176,13 @@ def main(parser):
     # models
     GA = Generator(
         args.image_size, args.image_channels, args.bottom_width,
-        args.num_downs, args.num_feats, args.g_channels,
+        args.num_downs, args.num_feats, args.g_channels, args.hid_channels,
         args.layer_num_blocks, not args.g_disable_sn, args.g_bias,
         args.g_norm_name, args.g_act_name
     )
     GH = Generator(
         args.image_size, args.image_channels, args.bottom_width,
-        args.num_downs, args.num_feats, args.g_channels,
+        args.num_downs, args.num_feats, args.g_channels, args.hid_channels,
         args.layer_num_blocks, not args.g_disable_sn, args.g_bias,
         args.g_norm_name, args.g_act_name
     )
