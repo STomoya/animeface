@@ -3,7 +3,7 @@ import random
 import glob
 from collections.abc import Callable
 
-from .dataset_base import Image, ImageXDoG, LRHR, make_default_transform
+from .dataset_base import Image, ImageImage, ImageXDoG, LRHR, make_default_transform
 
 class DanbooruPortraitDataset(Image):
     '''Danbooru Portrait Dataset
@@ -21,6 +21,22 @@ class DanbooruPortraitDataset(Image):
     def _load(self):
         image_paths = glob.glob('/usr/src/data/danbooru/portraits/portraits/*')
         return image_paths
+
+class DanbooruPortraitCelebADataset(ImageImage):
+    def __init__(self, image_size, transform=None, num_images=None):
+        if transform is None:
+            transform = make_default_transform(image_size, 1.2)
+        super().__init__(transform)
+        if num_images < self.length:
+            self.images1 = self.images1[:num_images]
+            self.images2 = self.images2[:num_images]
+            self.length  = num_images
+
+    def _load(self):
+        images = glob.glob('/usr/src/data/danbooru/portraits/portraits/*')
+        celeba = glob.glob('/usr/src/data/celeba/img_align_celeba/*')
+        length = min(len(images), len(celeba))
+        return images[:length], celeba[:length]
 
 class DanbooruPortraitSRDataset(LRHR):
     def __init__(self, image_size, scale=2, resize_ratio=1.1, transform=None, num_images=None):

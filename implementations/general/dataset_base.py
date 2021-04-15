@@ -55,6 +55,23 @@ class Image(Dataset, _common_attr):
 
         return image
 
+class ImageImage(Dataset, _common_attr):
+    def __init__(self, transform):
+        self.images1, self.images2 = self._load()
+        self.length = len(self.images1)
+        self.transform = transform
+    
+    def __getitem__(self, index):
+        image1 = self.images1[index]
+        image2 = self.images2[index]
+
+        image1 = pilImage.open(image1).convert('RGB')
+        image2 = pilImage.open(image2).convert('RGB')
+        image1 = self.transform(image1)
+        image2 = self.transform(image2)
+
+        return image1, image2
+
 class LRHR(Dataset, _common_attr):
     '''Low Resolution, High Resolution dataset base class
     '''

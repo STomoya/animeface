@@ -14,6 +14,7 @@ services:
             - /mnt/D/Data/animefacedataset:/usr/src/data/animefacedataset
             - /mnt/D/Data/danbooru:/usr/src/data/danbooru
             - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
+            - /mnt/D/Data/celeba:/usr/src/data/celeba
         working_dir: /usr/src
         tty: true
         shm_size: '2gb'
