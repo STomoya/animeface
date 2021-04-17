@@ -7,3 +7,4 @@ illustration2vec
 scikit-image
 scipy
 kornia
+opencv-python
