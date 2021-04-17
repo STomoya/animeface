@@ -92,11 +92,11 @@ def train(
                     GH.train()
                 image_grid = _image_grid(test[0], test[1], ah, ha)
                 save_image(image_grid, f'implementations/GANILLA/result/{status.batches_done}.jpg',
-                    nrow=4*3, normalize=True, range=(-1, 1))
+                    nrow=4*3, normalize=True, value_range=(-1, 1))
                 ckpt = dict(ga=GA.state_dict(), gh=GH.state_dict())
                 torch.save(ckpt, f'implementations/GANILLA/result/G_{status.batches_done}.pt')
-            save_image(AH, 'running_AH.jpg', normalize=True, range=(-1, 1))
-            save_image(HA, 'running_HA.jpg', normalize=True, range=(-1, 1))
+            save_image(AH, 'running_AH.jpg', normalize=True, value_range=(-1, 1))
+            save_image(HA, 'running_HA.jpg', normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(

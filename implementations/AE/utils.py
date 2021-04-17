@@ -43,7 +43,7 @@ def train(
 
             if batches_done % save_iterval == 0:
                 save_image(output[:9], f'implementations/AE/result/recon_{batches_done}.png',
-                           nrow=3, normalize=True, range=image_range)
+                           nrow=3, normalize=True, value_range=image_range)
 
             batch_loss_pyfloat = batch_loss.item()
             epoch_loss += batch_loss_pyfloat

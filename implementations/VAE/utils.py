@@ -53,9 +53,9 @@ def train(
                 with torch.no_grad():
                     images = model.decoder(test_sampler())
                 model.train()
-                save_image(images, f'implementations/VAE/result/{status.batches_done}.jpg', nrow=4, normalize=True, range=(-1, 1))
+                save_image(images, f'implementations/VAE/result/{status.batches_done}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
                 recons_images = _image_grid(src, dst)
-                save_image(recons_images, f'implementations/VAE/result/recons_{status.batches_done}.jpg', nrow=6, normalize=True, range=(-1, 1))
+                save_image(recons_images, f'implementations/VAE/result/recons_{status.batches_done}.jpg', nrow=6, normalize=True, value_range=(-1, 1))
                 torch.save(model.state_dict(), f'implementations/VAE/result/model_{status.batches_done}.pt')
 
             # updates

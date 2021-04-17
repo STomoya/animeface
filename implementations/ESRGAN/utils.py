@@ -87,9 +87,9 @@ def train(
                 image_grid = _image_grid(test_batch[0], test_batch[1], image)
                 save_image(
                     image_grid, f'implementations/ESRGAN/result/{status.batches_done}.jpg',
-                    nrow=3*3, normalize=True, range=(-1, 1))
+                    nrow=3*3, normalize=True, value_range=(-1, 1))
                 torch.save(G.state_dict(), f'implementations/ESRGAN/result/G_{status.batches_done}.pt')
-            save_image(fake, 'running_esrgan.jpg', normalize=True, range=(-1, 1))
+            save_image(fake, 'running_esrgan.jpg', normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(

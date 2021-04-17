@@ -89,7 +89,7 @@ def train(
             # save
             if status.batches_done % save == 0:
                 image_grid = _image_grid(line, fake, rgb, num_images=6)
-                save_image(image_grid, f'implementations/pix2pixHD/result/{status.batches_done}.jpg', nrow=6, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/pix2pixHD/result/{status.batches_done}.jpg', nrow=6, normalize=True, value_range=(-1, 1))
                 torch.save(G.state_dict(), f'implementations/pix2pixHD/result/G_{status.batches_done}.pt')
             
             # updates
@@ -169,7 +169,7 @@ def train_global(
             # save
             if status.batches_done % save == 0:
                 image_grid = _image_grid(line, fake, rgb, num_images=6)
-                save_image(image_grid, f'implementations/pix2pixHD/result/global_{status.batches_done}.jpg', nrow=6, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/pix2pixHD/result/global_{status.batches_done}.jpg', nrow=6, normalize=True, value_range=(-1, 1))
             
             # updates
             loss_dict = dict(
@@ -262,7 +262,7 @@ def train_local(
             # save
             if status.batches_done % save == 0:
                 image_grid = _image_grid(line, fake, rgb, num_images=6)
-                save_image(image_grid, f'implementations/pix2pixHD/result/{status.batches_done}.jpg', nrow=6, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/pix2pixHD/result/{status.batches_done}.jpg', nrow=6, normalize=True, value_range=(-1, 1))
                 torch.save(G.state_dict(), f'implementations/pix2pixHD/result/G_{status.batches_done}.pt')
             
             # updates

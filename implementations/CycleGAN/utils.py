@@ -91,14 +91,14 @@ def train(
             # save
             if status.batches_done % save == 0:
                 image_grid = _image_grid(line, line2rgb)
-                save_image(image_grid, f'implementations/CycleGAN/result/recons_{status.batches_done}.jpg', nrow=3*2, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/CycleGAN/result/recons_{status.batches_done}.jpg', nrow=3*2, normalize=True, value_range=(-1, 1))
                 # eval
                 GC.eval()
                 with torch.no_grad():
                     line2rgb = GC(test[1])
                 GC.train()
                 image_grid = _image_grid(test[1], line2rgb)
-                save_image(image_grid, f'implementations/CycleGAN/result/test_{status.batches_done}.jpg', nrow=3*2, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/CycleGAN/result/test_{status.batches_done}.jpg', nrow=3*2, normalize=True, value_range=(-1, 1))
                 # model
                 torch.save(GC.state_dict(), f'implementations/CycleGAN/result/colorize_{status.batches_done}.pt')
                 # torch.save(GL.state_dict(), f'implementations/CycleGAN/result/sketch_{status.batches_done}.pt')

@@ -106,7 +106,7 @@ class GANTrainingStatus:
             filename = '{}.png'.format(self.batches_done)
 
         tv.utils.save_image(
-            image_tensor, os.path.join(folder, filename), nrow=nrow, normalize=normalize, range=range
+            image_tensor, os.path.join(folder, filename), nrow=nrow, normalize=normalize, value_range=range
         )
 
     def __str__(self):
