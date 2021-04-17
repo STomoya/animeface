@@ -1,12 +1,9 @@
-torch
 torch-summary
 scikit-learn
-torchvision
-pillow
 matplotlib
 tqdm
 chainer
 illustration2vec
 scikit-image
 scipy
-git+https://github.com/kornia/kornia
+kornia
