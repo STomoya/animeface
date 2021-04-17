@@ -4,7 +4,7 @@ services:
     python:
         build:
             context: .
-            dockerfile: docker/Dockerfile
+            dockerfile: docker/torch/Dockerfile
         runtime: nvidia
         environment:
             - NVIDIA_VISIBLE_DEVICES=all
