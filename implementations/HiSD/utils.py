@@ -145,9 +145,9 @@ def train(
                 fake = G_ema(real, refs)
             images = _image_grid(real, fake)
             save_image(images, f'implementations/HiSD/result/{status.batches_done}_tag{i}_{j}to{j_}.jpg',
-                nrow=4, normalize=True, range=(-1, 1))
+                nrow=4, normalize=True, value_range=(-1, 1))
             torch.save(G.state_dict(), f'implementations/HiSD/result/G_{status.batches_done}.pt',)
-        save_image(fake, f'running.jpg', nrow=4, normalize=True, range=(-1, 1))
+        save_image(fake, f'running.jpg', nrow=4, normalize=True, value_range=(-1, 1))
 
         # updates
         loss_dict = dict(
@@ -232,7 +232,7 @@ def main(parser):
         )
 
     data = dataset.sample(2, 1)
-    save_image(data, 'sample.jpg', normalize=True, range=(-1, 1))
+    save_image(data, 'sample.jpg', normalize=True, value_range=(-1, 1))
 
     sampler = functools.partial(sample_nnoise, device=device)
     const_z = [sample_nnoise((16, args.latent_dim), device=device) for _ in dataset_classes]

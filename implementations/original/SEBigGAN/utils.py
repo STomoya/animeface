@@ -91,9 +91,9 @@ def train(
             if status.batches_done % save == 0:
                 with torch.no_grad():
                     images = G_ema(const_z)
-                save_image(images, f'implementations/original/SEBigGAN/result/{status.batches_done}.jpg', nrow=4, normalize=True, range=(-1, 1))
+                save_image(images, f'implementations/original/SEBigGAN/result/{status.batches_done}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
                 torch.save(G_ema.state_dict(), f'implementations/original/SEBigGAN/result/G_{status.batches_done}.pt')
-            save_image(fake, './running.jpg', nrow=8, normalize=True, range=(-1, 1))
+            save_image(fake, './running.jpg', nrow=8, normalize=True, value_range=(-1, 1))
 
             loss_dict = dict(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,

@@ -161,9 +161,9 @@ def train(
             if status.batches_done % save == 0:
                 with torch.no_grad():
                     images, _ = G_ema(const_z)
-                save_image(images, f'implementations/edge/result/{status.batches_done}.jpg', nrow=4, normalize=True, range=(-1, 1))
+                save_image(images, f'implementations/edge/result/{status.batches_done}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
                 torch.save(G_ema.state_dict(), f'implementations/edge/result/G_{status.batches_done}.pt')
-            save_image(fake, f'running.jpg', nrow=4, normalize=True, range=(-1, 1))
+            save_image(fake, f'running.jpg', nrow=4, normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(

@@ -4,7 +4,7 @@ services:
     python:
         build:
             context: .
-            dockerfile: docker/Dockerfile
+            dockerfile: docker/torch/Dockerfile
         runtime: nvidia
         environment:
             - NVIDIA_VISIBLE_DEVICES=all
@@ -17,4 +17,4 @@ services:
             - /mnt/D/Data/celeba:/usr/src/data/celeba
         working_dir: /usr/src
         tty: true
-        shm_size: '2gb'
+        shm_size: '8gb'

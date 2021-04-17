@@ -167,11 +167,11 @@ def train(
                         state_dict = G.state_dict()
                 save_image(
                     images, f'implementations/ContraD/result/{status.batches_done}.jpg',
-                    nrow=4, normalize=True, range=(-1, 1))
+                    nrow=4, normalize=True, value_range=(-1, 1))
                 torch.save(
                     state_dict, f'implementations/ContraD/result/G_{status.batches_done}.pt')
 
-            save_image(fake, f'running.jpg', nrow=4, normalize=True, range=(-1, 1))
+            save_image(fake, f'running.jpg', nrow=4, normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(

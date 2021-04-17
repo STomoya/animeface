@@ -165,7 +165,7 @@ def train(
             if epoch % verbose_interval == 0:
                 print('{:3} / {:3} [G : {:.5f}] [D : {:.5f}]'.format(epoch, epochs, G_loss.item(), D_loss.item()))
             if epoch % save_interval == 0:
-                save_image(fake, './SinGAN/result/{}_{}.png'.format(scale, epoch), normalize=True, range=(-1, 1))
+                save_image(fake, './SinGAN/result/{}_{}.png'.format(scale, epoch), normalize=True, value_range=(-1, 1))
 
         if scale+1 < len(epochses):
             G.progress(rec_fake, reals[scale])
@@ -177,7 +177,7 @@ def train(
     if test:
         G.eval(all=True)
         img = G.forward(sizes=test)
-        save_image(img, './implementations/SinGAN/result/eval_{}x{}.png'.format(*test[-1]), normalize=True, range=(-1, 1))
+        save_image(img, './implementations/SinGAN/result/eval_{}x{}.png'.format(*test[-1]), normalize=True, value_range=(-1, 1))
 
 def add_arguments(parser):
     parser.add_argument('--image-path', default='./data/animefacedataset/images/63568_2019.jpg', type=str, help='path to image')

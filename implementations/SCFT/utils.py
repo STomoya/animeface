@@ -115,11 +115,11 @@ def train(
                 image_grid = _image_grid(test_batch[1], test_batch[0], image)
                 save_image(
                     image_grid, f'implementations/SCFT/result/{status.batches_done}.jpg',
-                    nrow=3*3, normalize=True, range=(-1, 1)
+                    nrow=3*3, normalize=True, value_range=(-1, 1)
                 )
                 torch.save(G.state_dict(), f'implementations/SCFT/result/G_{status.batches_done}.pt')
             
-            save_image(fake, 'running.jpg', nrow=5, normalize=True, range=(-1, 1))
+            save_image(fake, 'running.jpg', nrow=5, normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(

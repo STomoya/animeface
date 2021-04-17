@@ -102,7 +102,7 @@ def train(
             if status.batches_done % save == 0:
                 # save running samples
                 image_grid = _image_grid(line, fake, rgb)
-                save_image(image_grid, f'implementations/SPADE/result/recons_{status.batches_done}.jpg', nrow=3*3, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/SPADE/result/recons_{status.batches_done}.jpg', nrow=3*3, normalize=True, value_range=(-1, 1))
                 # test
                 if E is not None: E.eval()
                 G.eval()
@@ -114,7 +114,7 @@ def train(
                 G.train()
                 # save test samples
                 image_grid = _image_grid(test[1], fake, test[0])
-                save_image(image_grid, f'implementations/SPADE/result/test_{status.batches_done}.jpg', nrow=3*3, normalize=True, range=(-1, 1))
+                save_image(image_grid, f'implementations/SPADE/result/test_{status.batches_done}.jpg', nrow=3*3, normalize=True, value_range=(-1, 1))
                 # save models
                 torch.save(G.state_dict(), f'implementations/SPADE/result/G_{status.batches_done}.pt')
                 if E is not None:
