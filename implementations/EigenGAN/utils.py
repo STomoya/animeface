@@ -21,7 +21,7 @@ def orthogonal_regularizer(model):
             flat = param.view(param.size(0), -1)
             sym = torch.mm(flat, flat.T)
             eye = torch.eye(sym.size(-1), device=sym.device)
-            loss = loss + (sym - eye).pow(2).sum() * 0.5
+            loss = loss + (sym - eye).abs().sum() * 0.5
     return loss
 
 def train(
@@ -197,7 +197,7 @@ def main(parser):
     )
     G.to(device)
     D.to(device)
-    init_func = init().N002
+    init_func = init().xavier
     G.apply(init_func)
     D.apply(init_func)
     if args.ema:
