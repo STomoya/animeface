@@ -24,15 +24,13 @@ def sample_unoise(size, from_=0., to=1., device=None):
     return torch.empty(size, device=device).uniform_(from_, to)
 
 # exponential moving average
+@torch.no_grad()
 def update_ema(G, G_ema, decay=0.999):
     G.eval()
-
-    with torch.no_grad():
-        param_ema = dict(G_ema.named_parameters())
-        param     = dict(G.named_parameters())
-        for key in param_ema.keys():
-            param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
-
+    param_ema = dict(G_ema.named_parameters())
+    param     = dict(G.named_parameters())
+    for key in param_ema.keys():
+        param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
     G.train()
 
 class GANTrainingStatus:
