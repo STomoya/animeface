@@ -35,6 +35,8 @@ deep models for anime images.
 |Contrastive Discriminator (ContraD)|[openreview](https://openreview.net/forum?id=eo6U4CAwVmg)|[github](https://github.com/jh-jeong/ContraD)
 |deep convolutional GAN (DCGAN)|[arxiv](https://arxiv.org/abs/1511.06434)|-|
 |deep regret analytic GAN (DRAGAN)|[arxiv](https://arxiv.org/abs/1705.07215)|[github](https://github.com/kodalinaveen3/DRAGAN)|
+|Enhanced super resolution GAN (ESRGAN)|[arxiv](https://arxiv.org/abs/1809.00219)|[github](https://github.com/xinntao/ESRGAN)|
+|GANILLA|[arxiv](https://arxiv.org/abs/2002.05638)|[github](https://github.com/giddyyupp/ganilla)|
 |generative adversarial networks (GAN)|[arxiv](https://arxiv.org/abs/1406.2661)|-|
 |Image-to-image Translation via Hierarchical Style Disentanglement (HiSD)|[arxiv](https://arxiv.org/abs/2103.01456)|[github](https://github.com/imlixinyang/HiSD)|
 |Hologram(?) GAN (HoloGAN)|[arxiv](https://arxiv.org/abs/1904.01326)|[github](https://github.com/thunguyenphuoc/HoloGAN)
@@ -45,6 +47,7 @@ deep models for anime images.
 |Spatially-Adaptive Normalization (SPADE)|[arxiv](https://arxiv.org/abs/1903.07291)|[github](https://github.com/NVlabs/SPADE)|
 |style-based GAN (StyleGAN)|[arxiv](https://arxiv.org/abs/1812.04948)|[github](https://github.com/NVlabs/stylegan)|
 |style-based GAN 2 (StyleGAN2)|[arxiv](https://arxiv.org/abs/1912.04958)|[github](https://github.com/NVlabs/stylegan2)|
+|Super resolution GAN (SRGAN)|[arxiv](https://arxiv.org/abs/1609.04802)|-|
 |Transformer-based GAN (TransGAN)|[arxiv](https://arxiv.org/abs/2102.07074)|[github](https://github.com/VITA-Group/TransGAN)|
 |unsupervised GAN with adaptive layer-instance normalization (UGATIT)|[arxiv](https://arxiv.org/abs/1907.10830)|[github](https://github.com/taki0112/UGATIT)|
 |Wasserstein GAN (WGAN)|[arxiv](https://arxiv.org/abs/1701.07875)|-|
