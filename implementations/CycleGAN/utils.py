@@ -32,7 +32,6 @@ def train(
     status = Status(max_iter)
     loss = LSGANLoss()
     scaler = GradScaler() if amp else None
-    D_input = lambda x, y: torch.cat([x, y], dim=1)
 
     while status.batches_done < max_iter:
         for rgb, line in dataset:
@@ -45,14 +44,14 @@ def train(
             '''Discriminator'''
             with autocast(amp):
                 # D(x)
-                real_rgb_prob = DC(D_input(line, rgb))
-                real_line_prob = DL(D_input(line, rgb))
+                real_rgb_prob = DC(rgb)
+                real_line_prob = DL(line)
                 # generate images
                 line2rgb = GC(line)
                 rgb2line = GL(rgb)
                 # D(G(y))
-                fake_rgb_prob = DC(D_input(line, line2rgb.detach()))
-                fake_line_prob = DL(D_input(rgb2line.detach(), rgb))
+                fake_rgb_prob = DC(line2rgb.detach())
+                fake_line_prob = DL(rgb2line.detach())
                 # loss
                 adv_loss_line = loss.d_loss(real_line_prob, fake_line_prob)
                 adv_loss_rgb  = loss.d_loss(real_rgb_prob, fake_rgb_prob)
@@ -68,8 +67,8 @@ def train(
             '''Generator'''
             with autocast(amp):
                 # D(G(y))
-                fake_rgb_prob = DC(D_input(line, line2rgb))
-                fake_line_prob = DL(D_input(rgb2line, rgb))
+                fake_rgb_prob = DC(line2rgb)
+                fake_line_prob = DL(rgb2line)
                 # G(G(x))
                 line2rgb2line = GL(line2rgb)
                 rgb2line2rgb  = GC(rgb2line)
@@ -102,6 +101,7 @@ def train(
                 # model
                 torch.save(GC.state_dict(), f'implementations/CycleGAN/result/colorize_{status.batches_done}.pt')
                 # torch.save(GL.state_dict(), f'implementations/CycleGAN/result/sketch_{status.batches_done}.pt')
+            save_image(line2rgb, 'running_color.jpg', normalize=True, value_range=(-1, 1))
 
             # updates
             loss_dict = dict(
@@ -207,12 +207,12 @@ def main(parser):
     )
     # - line2color D
     DC = Discriminator(
-        args.image_size, args.line_channels+args.rgb_channels, args.num_layers,
+        args.image_size, args.rgb_channels, args.num_layers,
         args.channels, args.d_norm_name, args.d_act_name, d_use_sn, d_use_bias
     )
     # - color2line D
     DL = Discriminator(
-        args.image_size, args.line_channels+args.rgb_channels, args.num_layers,
+        args.image_size, args.line_channels, args.num_layers,
         args.channels, args.d_norm_name, args.d_act_name, d_use_sn, d_use_bias
     )
     # init

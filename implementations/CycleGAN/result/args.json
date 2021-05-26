@@ -4,7 +4,7 @@
   "disable_amp": false,
   "dataset": "animeface",
   "image_size": 128,
-  "batch_size": 24,
+  "batch_size": 32,
   "min_year": 2005,
   "num_images": 60000,
   "save": 1000,
