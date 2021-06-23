@@ -8,3 +8,4 @@ scikit-image
 scipy
 kornia
 opencv-python
+opt_einsum
