@@ -1,0 +1,57 @@
+{
+  "name": "HiT",
+  "disable_gpu": false,
+  "disable_amp": true,
+  "dataset": "animeface",
+  "image_size": 128,
+  "batch_size": 8,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "num_test": 16,
+  "arch": "s",
+  "latent_dim": 128,
+  "dims": [
+    512,
+    256,
+    128,
+    64,
+    32
+  ],
+  "bottom": 8,
+  "low_stages": 4,
+  "num_heads": [
+    16,
+    8,
+    4,
+    4,
+    4
+  ],
+  "num_blocks": [
+    2,
+    2,
+    1,
+    1,
+    1
+  ],
+  "patch_sizes": [
+    4,
+    4,
+    8,
+    8
+  ],
+  "channels": 32,
+  "max_channels": 512,
+  "act_name": "lrelu",
+  "ema": false,
+  "init_func": "xavier",
+  "lr": 0.0001,
+  "betas": [
+    0.5,
+    0.99
+  ],
+  "gp_lambda": 0.0,
+  "policy": "color,translation"
+}
