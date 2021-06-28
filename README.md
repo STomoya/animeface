@@ -9,15 +9,15 @@ deep models for anime images.
 
 ## Datasets
 
-- [anime-face-dataset](https://www.kaggle.com/splcher/animefacedataset)  
-    Anime faces collected from [Getchu.com](http://www.getchu.com/).  
-    Based on [Mckinsey666](https://github.com/Mckinsey666/Anime-Face-Dataset)'s dataset.  
+- [anime-face-dataset](https://www.kaggle.com/splcher/animefacedataset)
+    Anime faces collected from [Getchu.com](http://www.getchu.com/).
+    Based on [Mckinsey666](https://github.com/Mckinsey666/Anime-Face-Dataset)'s dataset.
     63.6K images.
-- [Tagged Anime Illustrations](https://www.kaggle.com/mylesoneill/tagged-anime-illustrations)  
-    A subset of the [Danbooru2017](https://www.gwern.net/Danbooru2017), and the [moeimouto face dataset](http://www.nurs.or.jp/~nagadomi/animeface-character-dataset/).  
+- [Tagged Anime Illustrations](https://www.kaggle.com/mylesoneill/tagged-anime-illustrations)
+    A subset of the [Danbooru2017](https://www.gwern.net/Danbooru2017), and the [moeimouto face dataset](http://www.nurs.or.jp/~nagadomi/animeface-character-dataset/).
     337K Danbooru images, 17.4K moeimouto face images.
-- [Danbooru2019 Portraits](https://www.gwern.net/Crops#danbooru2019-portraits) [1]  
-    Portraits of anime characters collected from [Danbooru2019](https://www.gwern.net/Danbooru2019).  
+- [Danbooru2019 Portraits](https://www.gwern.net/Crops#danbooru2019-portraits) [1]
+    Portraits of anime characters collected from [Danbooru2019](https://www.gwern.net/Danbooru2019).
     302K portraits.
 
 ## Models
@@ -39,6 +39,7 @@ deep models for anime images.
 |GANILLA|[arxiv](https://arxiv.org/abs/2002.05638)|[github](https://github.com/giddyyupp/ganilla)|
 |generative adversarial networks (GAN)|[arxiv](https://arxiv.org/abs/1406.2661)|-|
 |Image-to-image Translation via Hierarchical Style Disentanglement (HiSD)|[arxiv](https://arxiv.org/abs/2103.01456)|[github](https://github.com/imlixinyang/HiSD)|
+|Improved Transformer for High-Resolution GANs (HiT)|[arxiv](https://arxiv.org/abs/2106.07631)|-|
 |Hologram(?) GAN (HoloGAN)|[arxiv](https://arxiv.org/abs/1904.01326)|[github](https://github.com/thunguyenphuoc/HoloGAN)
 |progressive growing of GANs (PGGAN)|[arxiv](https://arxiv.org/abs/1710.10196)|[github](https://github.com/tkarras/progressive_growing_of_gans)|
 |pix2ix|[arxiv](https://arxiv.org/abs/1703.10593)|[github](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)|
