@@ -1,0 +1,26 @@
+{
+  "name": "FourierFeatures",
+  "disable_gpu": false,
+  "disable_amp": false,
+  "dataset": "animeface",
+  "image_size": 512,
+  "batch_size": 32,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 20,
+  "max_iters": 500,
+  "default_epochs": 100,
+  "path": "/usr/src/data/danbooru/2020/0638/1115638.jpg",
+  "no_map": false,
+  "map_size": 256,
+  "map_scale": 12.0,
+  "num_layers": 4,
+  "hid_channels": 256,
+  "act_name": "relu",
+  "norm_name": null,
+  "lr": 0.001,
+  "betas": [
+    0.9,
+    0.999
+  ]
+}
