@@ -177,13 +177,13 @@ def main(parser):
         args.image_size, args.g_bottom, not args.no_spe,
         args.latent_dim, args.in_channels, args.style_dim,
         args.out_channels, args.g_channels,
-        args.g_max_channels, args.pad, args.map_num_layers, args.map_lr,
+        args.g_max_channels, not args.pad, args.map_num_layers, args.map_lr,
         not args.no_pixelnorm, args.filter_size, args.g_act_name)
     G_ema = Generator(
         args.image_size, args.g_bottom, not args.no_spe,
         args.latent_dim, args.in_channels, args.style_dim,
         args.out_channels, args.g_channels,
-        args.g_max_channels, args.pad, args.map_num_layers, args.map_lr,
+        args.g_max_channels, not args.pad, args.map_num_layers, args.map_lr,
         not args.no_pixelnorm, args.filter_size, args.g_act_name)
     D = Discriminator(
         args.image_size, args.d_bottom, args.out_channels,
