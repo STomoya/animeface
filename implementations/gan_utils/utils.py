@@ -125,7 +125,7 @@ class GANTrainingStatus:
                     '[{} : {:.5f}]'.format(key, self.losses[key][-1])
                 )
         return '\t'.join(partial_msg)
-        
+
 def gif_from_files(image_paths, filename='out.gif', optimize=False, duration=500, loop=0):
     images = []
     for path in image_paths:
