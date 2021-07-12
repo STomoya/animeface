@@ -1,0 +1,53 @@
+{
+  "name": "PEinGAN",
+  "disable_gpu": false,
+  "disable_amp": false,
+  "dataset": "animeface",
+  "image_size": 64,
+  "batch_size": 32,
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "num_test": 16,
+  "g_bottom": 4,
+  "no_spe": false,
+  "latent_dim": 512,
+  "in_channels": 512,
+  "style_dim": 512,
+  "out_channels": 3,
+  "g_channels": 32,
+  "g_max_channels": 512,
+  "pad": false,
+  "map_num_layers": 8,
+  "no_pixelnorm": false,
+  "filter_size": 4,
+  "g_act_name": "lrelu",
+  "d_bottom": 2,
+  "d_channels": 32,
+  "d_max_channels": 512,
+  "mbsd_groups": 4,
+  "no_gap": false,
+  "d_act_name": "lrelu",
+  "map_lr": 0.01,
+  "lr": 0.001,
+  "betas": [
+    0.0,
+    0.99
+  ],
+  "gp_lambda": 5.0,
+  "d_k": 16,
+  "scales": [
+    1.0,
+    1.5,
+    2.0
+  ],
+  "scale_probs": [
+    0.3333333333333333,
+    0.3333333333333333,
+    0.3333333333333333
+  ],
+  "mix_prob": 0.5,
+  "policy": "color,translation"
+}
