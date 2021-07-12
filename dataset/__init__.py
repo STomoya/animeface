@@ -14,3 +14,9 @@ from dataset.portrait import (
     DanbooruPortraitSR,
     DanbooruPortraitXDoG
 )
+
+from dataset.danbooru import (
+    Danbooru,
+    DanbooruSR,
+    DanbooruAutoPair
+)
