@@ -12,7 +12,7 @@ def get_device(gpu=True):
 
 class Status:
     def __init__(self, max_iters):
-        self.bar = tqdm(total=max_iters, ncols=150)
+        self.bar = tqdm(total=max_iters, ncols=100)
         self.batches_done = 0
         self.loss = None
 

@@ -148,7 +148,7 @@ def add_arguments(parser):
     parser.add_argument('--gp-lambda', default=5., type=float)
     parser.add_argument('--d-k', default=16, type=int)
     parser.add_argument('--scales', default=[1., 1.5, 2.])
-    parser.add_argument('--scale-probs', default=[0.5, 0.25, 0.25])
+    parser.add_argument('--scale-probs', default=[1/3, 1/3, 1/3])
     parser.add_argument('--mix-prob', default=0.5, type=float)
     parser.add_argument('--policy', default='color,translation')
     return parser
