@@ -7,3 +7,10 @@ from dataset.animeface import (
     AnimeFaceLabel,
     AnimeFaceOneHot
 )
+
+from dataset.portrait import (
+    DanbooruPortrait,
+    DanbooruPortraitCelebA,
+    DanbooruPortraitSR,
+    DanbooruPortraitXDoG
+)
