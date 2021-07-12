@@ -1,6 +1,10 @@
 
+from __future__ import annotations
+
 import os
 import random
+from collections.abc import Callable
+from typing import Union
 
 import torch
 import torchvision.transforms as T
@@ -15,7 +19,7 @@ def make_default_transform(
     resize_scale: float=1.,
     hflip: bool=True,
     normalize: bool=True
-):
+) -> Callable:
     '''default transforms
     '''
     t_list = [
@@ -54,11 +58,13 @@ class WrappedDataset(Dataset):
 class Image(WrappedDataset):
     '''Image dataset base class
     '''
-    def __init__(self, transform):
+    def __init__(self,
+        transform: Callable
+    ) -> None:
         self.images = self._load()
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> torch.Tensor:
         image = self.images[index]
 
         image = pilImage.open(image).convert('RGB')
@@ -66,17 +72,19 @@ class Image(WrappedDataset):
 
         return image
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.images)
 
 class ImageImage(WrappedDataset):
     '''Image Image dataset base class
     '''
-    def __init__(self, transform):
+    def __init__(self,
+        transform: Callable
+    ) -> None:
         self.images1, self.images2 = self._load()
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
         image1 = self.images1[index]
         image2 = self.images2[index]
 
@@ -87,19 +95,23 @@ class ImageImage(WrappedDataset):
 
         return image1, image2
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.images1)
 
 class LRHR(WrappedDataset):
     '''Low Resolution, High Resolution dataset base class
     '''
-    def __init__(self, image_size, scale=2, resize_ratio=1.):
+    def __init__(self,
+        image_size: int,
+        scale: float=2.,
+        resize_scale: float=1.
+    ) -> None:
         self.images = self._load()
         self.image_size = image_size
-        self.resize_ratio = resize_ratio
+        self.resize_scale = resize_scale
         self.scale = scale
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
         image = self.images[index]
 
         image = pilImage.open(image).convert('RGB')
@@ -107,14 +119,14 @@ class LRHR(WrappedDataset):
 
         return lr, sr
 
-    def transform(self, img):
+    def transform(self, img) -> tuple[torch.Tensor, torch.Tensor]:
         return self._default_transform(img)
 
-    def _default_transform(self, img):
+    def _default_transform(self, img) -> tuple[torch.Tensor, torch.Tensor]:
         lr_size = self.image_size // self.scale
-        sr = TF.resize(img, int(self.image_size*self.resize_ratio))
+        sr = TF.resize(img, int(self.image_size*self.resize_scale))
         sr = TF.center_crop(sr, self.image_size)
-        lr = TF.resize(img, int(lr_size*self.resize_ratio))
+        lr = TF.resize(img, int(lr_size*self.resize_scale))
         lr = TF.center_crop(lr, lr_size)
 
         if random.random() > 0.5:
@@ -127,17 +139,19 @@ class LRHR(WrappedDataset):
         lr = TF.normalize(lr, 0.5, 0.5)
         return lr, sr
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.images)
 
 class ImageXDoG(WrappedDataset):
     '''Image + XDoG dataset base class
     '''
-    def __init__(self, transform):
+    def __init__(self,
+        transform: Callable
+    ) -> None:
         self.images, self.xdogs = self._load()
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> tuple[torch.Tensor, torch.Tensor]:
         image = self.images[index]
         xdog  = self.xdogs[index]
 
@@ -149,28 +163,30 @@ class ImageXDoG(WrappedDataset):
 
         return image, xdog
 
-    def shuffle_xdog(self):
+    def shuffle_xdog(self) -> None:
         random.shuffle(self.xdogs)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.images)
 
 class ImageLabel(WrappedDataset):
     '''Image + Label dataset base class
     '''
-    def __init__(self, transform):
+    def __init__(self,
+        transform: Callable
+    ) -> None:
         self.images, labels = self._load()
         self.transform = transform
 
         self._make_label(labels)
 
-    def _make_label(self, labels):
+    def _make_label(self, labels) -> None:
         self.encoder = LabelEncoder()
         labels = np.array(labels).reshape(-1)
         self.labels = self.encoder.fit_transform(labels)
         self.num_classes = len(self.encoder.classes_)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index) -> tuple[torch.Tensor, int]:
         image = self.images[index]
         label = self.labels[index]
 
@@ -179,7 +195,9 @@ class ImageLabel(WrappedDataset):
 
         return image, label
 
-    def inverse_transform(self, label):
+    def inverse_transform(self,
+        label: Union[torch.Tensor, np.ndarray, list]
+    ) -> list[str]:
         if isinstance(label, torch.Tensor):
             label = label.cpu().numpy()
         if not isinstance(label, np.ndarray):
@@ -187,22 +205,26 @@ class ImageLabel(WrappedDataset):
         label = label.reshape(-1)
         return self.encoder.inverse_transform(label)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.images)
 
 class ImageOnehot(ImageLabel):
     '''Image + One-Hot label dataset base class
     '''
-    def __init__(self, transform):
+    def __init__(self,
+        transform: Callable
+    ) -> None:
         super().__init__(transform)
 
-    def _make_label(self, labels):
+    def _make_label(self, labels) -> None:
         self.encoder = OneHotEncoder()
         labels = np.array(labels).reshape(-1, 1)
         self.labels = self.encoder.fit_transform(labels).toarray()
         self.num_classes = len(self.encoder.categories_[0])
 
-    def inverse_transform(self, label):
+    def inverse_transform(self,
+        label: Union[torch.Tensor, np.ndarray, list]
+    ) -> list[str]:
         if isinstance(label, torch.Tensor):
             label = label.cpu().numpy()
         if not isinstance(label, np.ndarray):
