@@ -9,3 +9,5 @@ scipy
 kornia
 opencv-python
 opt_einsum
+loguru
+rich
