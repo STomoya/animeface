@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any
 
@@ -10,9 +12,19 @@ def get_device(gpu: bool=torch.cuda.is_available()):
         return torch.device('cuda:0')
     return torch.device('cpu')
 
+def freeze(model: torch.nn.Module) -> None:
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+
+def unfreeze(model: torch.nn.Module) -> None:
+    for param in model.parameters():
+        param.requires_grad = True
+    model.train()
+
 def profile_once(
     fn: Callable,
-    input: Any,
+    input: tuple[Any],
     sort_by: str='self_cpu_time_total',
     backward: bool=True
 ):
