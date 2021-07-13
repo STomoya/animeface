@@ -2,3 +2,6 @@ chainer
 illustration2vec
 scikit-image
 tqdm
+joblib
+opencv-python
+scipy
