@@ -9,5 +9,5 @@ ARG UID
 RUN useradd -l -m -u ${UID} dockeruser
 USER ${UID}
 
-COPY docker/torch/requirements.txt requirements.txt
+COPY docker/preprocess/requirements.txt requirements.txt
 RUN pip --default-timeout=100 install -r requirements.txt
