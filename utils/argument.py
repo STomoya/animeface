@@ -5,7 +5,7 @@ import os
 import json
 import datetime
 from argparse import ArgumentParser
-from utils import EasyDict
+from utils.misc import EasyDict
 
 def get_default_parser() -> ArgumentParser:
     parser = ArgumentParser()

@@ -8,7 +8,7 @@ import warnings
 # import dnnlib
 # use utils.EasyDict instead of dnnlib.EasyDict.
 # It's the same because utils.EasyDict IS dnnlib.EasyDict, just in a different place.
-from utils import EasyDict
+from utils.misc import EasyDict
 
 #----------------------------------------------------------------------------
 # Cached construction of constant tensors. Avoids CPU=>GPU copy when the
