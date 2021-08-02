@@ -19,8 +19,8 @@ class init:
     bn = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
     def __init__(self,
-        my_classes: Optional[Iterable[nn.Module]]=None,
-        names: Optional[Iterable[str]]=None
+        my_classes: Optional[Iterable]=None,
+        names: Optional[Iterable]=None
     ) -> None:
 
         if isinstance(my_classes, Iterable):
