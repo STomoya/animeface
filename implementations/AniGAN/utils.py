@@ -9,16 +9,19 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import random_split
 from torchvision.utils import save_image
 
-from ..general import AnimeFaceCelebADataset, DanbooruPortraitCelebADataset, to_loader
-from ..general import Status, save_args, get_device
-from ..gan_utils.losses import HingeLoss, GradPenalty, Variable, GANLoss
-from ..gan_utils import init, update_ema
+from dataset import AnimeFaceCelebA, DanbooruPortraitCelebA, to_loader
+from utils import Status, save_args, add_args
+from nnutils import get_device, init, update_ema
+from nnutils.loss import HingeLoss
+from nnutils.loss.penalty import calc_grad, Variable
 
 from .model import Generator, Discriminator
 
 l1 = nn.L1Loss()
 
-class R1(GradPenalty):
+class R1:
+    def __init__(self) -> None:
+        self._clac_grad=calc_grad
     def penalty(self, A, B, D, scaler):
         loc_real = Variable(A, requires_grad=True)
         a_prob, _ = D(loc_real, False)
@@ -48,7 +51,7 @@ def train(
     rec_lambda, feature_lambda, gp_lambda,
     device, amp, save
 ):
-    
+
     status = Status(max_iters)
     loss   = HingeLoss()
     gp     = R1()
@@ -115,7 +118,7 @@ def train(
             else:
                 G_loss.backward()
                 optimizer_G.step()
-            
+
             update_ema(G, G_ema)
 
             # save
@@ -135,12 +138,12 @@ def train(
                 g=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0,
                 d=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0,
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
         random.shuffle(dataset.dataset.dataset.images1)
-    
-    status.plot()
+
+    status.plot_loss()
 
 def _image_grid(*args):
     _split = lambda x: x.chunk(x.size(0), dim=0)
@@ -150,52 +153,31 @@ def _image_grid(*args):
         out.extend(list(images))
     return torch.cat(out, dim=0)
 
-def add_arguments(parser):
-    parser.add_argument(
-        '--image-channels', default=3, type=int)
-    parser.add_argument(
-        '--num-test', default=4, type=int)
-
-    parser.add_argument(
-        '--bottom-width', default=16, type=int)
-    parser.add_argument(
-        '--g-channels', default=32, type=int)
-    parser.add_argument(
-        '--affine', default=False, action='store_true', help='affine transform style code in PoLIN. experimental.')
-    parser.add_argument(
-        '--style-dim', default=256, type=int)
-    parser.add_argument(
-        '--g-norm-name', default='in', choices=['in', 'bn'], help='norm layer in encoder')
-    parser.add_argument(
-        '--g-act-name', default='lrelu', choices=['lrelu', 'relu'])
-    parser.add_argument(
-        '--branch-width', default=32, type=int, help='last feature size in shared layers')
-    parser.add_argument(
-        '--d-channels', default=32, type=int)
-    parser.add_argument(
-        '--max-channels', default=512, type=int)
-    parser.add_argument(
-        '--d-norm-name', default='in', choices=['in', 'bn'], help='norm layer in encoder')
-    parser.add_argument(
-        '--d-act-name', default='lrelu', choices=['lrelu', 'relu'])
-    parser.add_argument(
-        '--disable-bias', default=False, action='store_true')
-
-    parser.add_argument(
-        '--lr', default=0.00002, type=float)
-    parser.add_argument(
-        '--betas', default=[0., 0.999], nargs=2, type=float)
-    parser.add_argument(
-        '--rec-lambda', default=1.2, type=float)
-    parser.add_argument(
-        '--feature-lambda', default=1., type=float)
-    parser.add_argument(
-        '--gp-lambda', default=1., type=float)
-    return parser
-
 def main(parser):
 
-    parser = add_arguments(parser)
+    # parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            image_channels = [3, 'image channels'],
+            num_test       = [4, 'number of test images'],
+            bottom_width   = [16, 'bottom width'],
+            g_channels     = [32, 'channel width multiplier'],
+            affine         = [False, 'affine transform style code in PoLIN. experimental.'],
+            style_dim      = [256, 'style dimension'],
+            g_norm_name    = ['in', 'norm layer in encoder'],
+            g_act_name     = ['lrelu', 'activation layer name'],
+            branch_width   = [32, 'last feature size in shared layers'],
+            d_channels     = [32, 'channel width multiplier'],
+            max_channels   = [512, 'maximum channels width'],
+            d_norm_name    = ['in', 'normalization layer name'],
+            d_act_name     = ['lrelu', 'activation function name'],
+            disable_bias   = [False, 'disable bias'],
+            lr             = [0.00002, 'learning rate'],
+            betas          = [[0., 0.999], 'betas'],
+            rec_lambda     = [1.2, 'lambda for reconstruction loss'],
+            feature_lambda = [1., 'lambda for feature mapping loss'],
+            gp_lambda      = [1., 'lambda for r1 panalty'])
+    )
     args = parser.parse_args()
     save_args(args)
 
@@ -204,13 +186,13 @@ def main(parser):
 
     # data
     if args.dataset == 'animeface':
-        dataset = AnimeFaceCelebADataset(args.image_size, args.min_year)
+        dataset = AnimeFaceCelebA(args.image_size, args.min_year)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitCelebADataset(args.image_size, num_images=args.num_images)
+        dataset = DanbooruPortraitCelebA(args.image_size, args.num_images)
     dataset, test = random_split(dataset, [len(dataset)-args.num_test, args.num_test])
-    dataset = to_loader(dataset, args.batch_size)
+    dataset = to_loader(dataset, args.batch_size, pin_memory=not args.disable_gpu)
     # test
-    test = to_loader(test, args.num_test, shuffle=False, use_gpu=False)
+    test = to_loader(test, args.num_test, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 
