@@ -64,21 +64,8 @@ def train(
 
     status.plot_loss()
 
-# def add_arguments(parser):
-#     parser.add_argument('--enc-dim', default=128, type=int, help='dimension to encode to')
-#     parser.add_argument('--min-size', default=8, type=int, help='minimum size before flatten')
-#     parser.add_argument('--num-layers', default=None, type=int, help='number of layers in encoder. if not given, will be calculated from --min-size')
-#     parser.add_argument('--img-channels', default=3, type=int, help='number of channels for the input image')
-#     parser.add_argument('--channels', default=64, type=int, help='channel width multiplier')
-#     parser.add_argument('--norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name')
-#     parser.add_argument('--act-name', default='relu', choices=['relu', 'lrelu'], help='activation function')
-#     parser.add_argument('--up-mode', default='bilinear', type=str, help='upsample mode')
-#     parser.add_argument('--output-act', default='tanh', choices=['tanh', 'sigmoid'], help='activation function on output')
-#     return parser
-
 def main(parser):
 
-    # parser = add_arguments(parser)
     parser = add_args(parser,
         dict(
             enc_dim      = [128,        'dimension to encode to'],
