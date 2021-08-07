@@ -9,10 +9,6 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 import torchvision.transforms as T
 
-# from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-# from ..general import Status, save_args, get_device
-# from ..gan_utils.losses import GANLoss, GradPenalty, Variable
-# from ..gan_utils import sample_nnoise, update_ema, DiffAugment
 from dataset import AnimeFace, DanbooruPortrait
 from utils import Status, save_args, add_args
 from nnutils import sample_nnoise, update_ema, get_device, freeze
@@ -189,37 +185,6 @@ def train(
 
     status.plot_loss()
 
-def add_argument(parser):
-    # StyleGAN args
-    parser.add_argument('--image-channels', default=3, type=int, help='number of channels for the generated image')
-    parser.add_argument('--style-dim', default=512, type=int, help='style feature dimension')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--max-channels', default=512, type=int, help='maximum channels')
-    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers in residual block')
-    parser.add_argument('--map-num-layers', default=4, type=int, help='number of layers in mapping network')
-    parser.add_argument('--map-lr', default=0.01, type=float, help='learning rate for mapping network')
-    parser.add_argument('--disable-map-norm', default=False, action='store_true', help='disable pixel normalization in mapping network')
-    parser.add_argument('--mbsd-groups', default=4, type=int, help='number of groups in mini-batch standard deviation')
-
-    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0., type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.99, type=float, help='beta2')
-    # parser.add_argument('--g-k', default=8, type=int, help='for lazy regularization. calculate perceptual path length loss every g_k iters')
-    # parser.add_argument('--d-k', default=16, type=int, help='for lazy regularization. calculate gradient penalty each d_k iters')
-    parser.add_argument('--r1-lambda', default=0.5, type=float, help='lambda for r1')
-    # parser.add_argument('--pl-lambda', default=0., type=float, help='lambda for perceptual path length loss')
-    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
-
-    # contra D args
-    parser.add_argument('--augmentation', default='diff', choices=['simclr', 'diff'], help='augmentation to perform')
-    parser.add_argument('--projection-features', default=256, type=int, help='output feature dimensions for projection')
-    parser.add_argument('--hidden-features', default=256, type=int, help='dimensions for hidden layers')
-    parser.add_argument('--d-act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function for D')
-    parser.add_argument('--con-lambda', default=1., type=float, help='lambda for contrastive loss')
-    parser.add_argument('--dis-lambda', default=1., type=float, help='lambda for adversarial loss')
-    parser.add_argument('--temperature', default=0.1, type=float, help='temperature used to calculate NTXent loss')
-    return parser
-
 class DeNormalize(nn.Module):
     def __init__(self, mean, std):
         super().__init__()
@@ -255,7 +220,6 @@ def get_simclr_transform(image_size, resize_ratio, denorm=False):
 
 def main(parser):
 
-    # parser = add_argument(parser)
     parser = add_args(parser,
         dict(
             image_channels      = [3, 'number of channels for the generated image'],
