@@ -1,5 +1,4 @@
 
-import os
 import functools
 
 import torch
@@ -10,10 +9,16 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 import torchvision.transforms as T
 
-from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..general import Status, save_args, get_device
-from ..gan_utils.losses import GANLoss, GradPenalty, Variable
-from ..gan_utils import sample_nnoise, update_ema, DiffAugment
+# from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
+# from ..general import Status, save_args, get_device
+# from ..gan_utils.losses import GANLoss, GradPenalty, Variable
+# from ..gan_utils import sample_nnoise, update_ema, DiffAugment
+from dataset import AnimeFace, DanbooruPortrait
+from utils import Status, save_args, add_args
+from nnutils import sample_nnoise, update_ema, get_device, freeze
+from nnutils.loss import NonSaturatingLoss
+from nnutils.loss.penalty import calc_grad, Variable
+from thirdparty.diffaugment import DiffAugment
 
 from ..StyleGAN2 import model as stylegan2
 from .model import Discriminator
@@ -69,21 +74,18 @@ def nt_xent_loss(out1, out2, temperature=0.1, normalized=False):
 
     return loss
 
-class GradPenalty_(GradPenalty):
+class R1:
+    def __init__(self) -> None:
+        super().__init__()
+        self._calc_grad = calc_grad
     '''grad penalty'''
-    def r1_regularizer(self, real, D, scaler=None):
+    def penalty(self, real, D, scaler=None):
         '''R1 regularizer'''
         real_loc = Variable(real, requires_grad=True)
         d_real_loc, _, _ = D(real_loc, stop_grad=False)
-
         gradients = self._calc_grad(d_real_loc, real_loc, scaler)
-
         gradients = gradients.reshape(gradients.size(0), -1)
         penalty = gradients.norm(2, dim=1).pow(2).mean() / 2.
-
-        if self.backward:
-            penalty.backward(retain_graph=True)
-
         return penalty
 
 def train(
@@ -93,10 +95,10 @@ def train(
     augment_r, augment_f,
     device, amp, save
 ):
-    
+
     status = Status(max_iters)
-    loss = GANLoss()
-    gp   = GradPenalty_()
+    loss = NonSaturatingLoss()
+    gp   = R1()
     scaler = GradScaler() if amp else None
 
     while status.batches_done < max_iters:
@@ -121,7 +123,7 @@ def train(
 
                 # loss
                 # no lazy regularization
-                r1 = gp.r1_regularizer(real, D, scaler) * r1_lambda
+                r1 = gp.penalty(real, D, scaler) * r1_lambda
                 D_loss = loss.d_loss(real_prob, fake_prob) * dis_lambda + r1
                 D_loss = D_loss + nt_xent_loss(
                     proj_con_1, proj_con_2, temperature
@@ -129,7 +131,7 @@ def train(
                 D_loss = D_loss + supervised_contrastive_loss(
                     proj_supcon_r_1, proj_supcon_r_2, proj_supcon_f, temperature
                 ) * con_lambda
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -143,7 +145,7 @@ def train(
                 fake_prob, *_ = D(fake_, stop_grad=False)
                 # loss
                 G_loss = loss.g_loss(fake_prob)
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -178,14 +180,14 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
-    
-    status.plot()
+
+    status.plot_loss()
 
 def add_argument(parser):
     # StyleGAN args
@@ -228,11 +230,11 @@ class DeNormalize(nn.Module):
 
 def get_simclr_transform(image_size, resize_ratio, denorm=False):
     '''Augmentation used in SimCLR'''
-    
+
     transform = []
     if denorm:
         transform.append(DeNormalize(0.5, 0.5))
-    
+
     transform.extend([
         T.RandomApply(
             [T.ColorJitter(0.5, 0.5, 0.5, 0.2)],
@@ -253,7 +255,30 @@ def get_simclr_transform(image_size, resize_ratio, denorm=False):
 
 def main(parser):
 
-    parser = add_argument(parser)
+    # parser = add_argument(parser)
+    parser = add_args(parser,
+        dict(
+            image_channels      = [3, 'number of channels for the generated image'],
+            style_dim           = [512, 'style feature dimension'],
+            channels            = [32, 'channel width multiplier'],
+            max_channels        = [512, 'maximum channels'],
+            block_num_conv      = [2, 'number of convolution layers in residual block'],
+            map_num_layers      = [4, 'number of layers in mapping network'],
+            map_lr              = [0.01, 'learning rate for mapping network'],
+            disable_map_norm    = [False, 'disable pixel norm'],
+            mbsd_groups         = [4, 'mini batch stddev group size'],
+            lr                  = [0.001, 'learning rate'],
+            betas               = [[0., 0.99], 'betas'],
+            r1_lambda           = [0.5, 'lambda for r1'],
+            policy              = ['color,translation', 'policy for DiffAugment'],
+            augmentation        = ['diff', 'augmentation to perform'],
+            projection_features = [256, 'output feature dimensions for projection'],
+            hidden_features     = [256, 'dimensions for hidden layers'],
+            d_act_name          = ['lrelu', 'activation function for D'],
+            con_lambda          = [1., 'lambda for contrastive loss'],
+            dis_lambda          = [1., 'lambda for adversarial loss'],
+            temperature         = [0.1, 'temperature used to calculate NTXent loss'])
+    )
     args = parser.parse_args()
     save_args(args)
 
@@ -268,12 +293,13 @@ def main(parser):
         ])
     else: transform = None
     if args.dataset == 'animeface':
-        dataset = YearAnimeFaceDataset(args.image_size, args.min_year, transform)
+        dataset = AnimeFace.asloader(
+            args.batch_size, (args.image_size, args.min_year, transform),
+            pin_memory=not args.disable_gpu)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitDataset(args.image_size, transform, args.num_images)
-    dataset = to_loader(
-                dataset, args.batch_size, shuffle=True,
-                num_workers=os.cpu_count(), use_gpu=torch.cuda.is_available())
+        dataset = DanbooruPortrait.asloader(
+            args.batch_size, (args.image_size, args.num_images, transform),
+            pin_memory=not args.disable_gpu)
 
     # random noise sampler
     sampler = functools.partial(sample_nnoise, device=device)
@@ -288,11 +314,11 @@ def main(parser):
     G_ema = stylegan2.Generator(
             args.image_size, args.image_channels, args.style_dim, args.channels, args.max_channels,
             args.block_num_conv, args.map_num_layers, normalize, args.map_lr)
-    
+
     # Discriminator
     # make StyleGAN2 D
     _D = stylegan2.Discriminator(
-            args.image_size, args.image_channels, args.channels, args.max_channels, 
+            args.image_size, args.image_channels, args.channels, args.max_channels,
             args.block_num_conv, args.mbsd_groups)
     # cut off last layers (act+linear)
     _D.blocks = nn.Sequential(*list(_D.blocks.children())[:-2])
@@ -307,7 +333,7 @@ def main(parser):
     G.init_weight(
         map_init_func=functools.partial(stylegan2.init_weight_N01, lr=args.map_lr),
         syn_init_func=stylegan2.init_weight_N01)
-    G_ema.eval()
+    freeze(G_ema)
     update_ema(G, G_ema, decay=0)
     D.apply(stylegan2.init_weight_N01)
 
@@ -316,10 +342,9 @@ def main(parser):
     D.to(device)
 
     # optimizer
-    betas = (args.beta1, args.beta2)
-    g_lr, g_betas = args.lr, betas
-    d_lr, d_betas = args.lr, betas
-    
+    g_lr, g_betas = args.lr, args.betas
+    d_lr, d_betas = args.lr, args.betas
+
     optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=g_betas)
     optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=d_betas)
 
@@ -341,7 +366,7 @@ def main(parser):
         augment_f = get_simclr_transform(
             args.image_size, 1., True
         )
-        
+
 
     train(
         args.max_iters, dataset, sampler, args.style_dim, const_z,
