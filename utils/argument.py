@@ -53,6 +53,8 @@ def add_args(
         elif value_type in [list, tuple]:
             ele_type = type(default[0])
             parser.add_argument(option, default=default, type=ele_type, nargs='*', help=help)
+        elif isinstance(value_type, type):
+            parser.add_argument(option, default=None, type=value_type, help=help)
 
     return parser
 
