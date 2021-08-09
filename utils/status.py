@@ -56,7 +56,7 @@ class Status:
         for key in keys:
             self.loss[key] = []
 
-    def plot_loss(self, filename):
+    def plot_loss(self, filename='loss'):
         '''plot loss'''
         try:
             import matplotlib
