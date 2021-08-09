@@ -1,18 +1,30 @@
 
+import functools
+
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import grad, Variable
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
-import numpy as np
 
 from .config import *
 from .model import Generator, Discriminator
 
 from .DiffAugment_pytorch import DiffAugment
 
-from ..general import AnimeFaceDataset, to_loader, save_args
+from dataset import AnimeFace, to_loader
+from utils import save_args, add_args, Status
+from nnutils import get_device, sample_nnoise
+from nnutils.loss import NonSaturatingLoss
+from nnutils.loss.penalty import calc_grad, Variable
+
+class r1_regularizer:
+    def __call__(self, real, D, mode) -> torch.Tensor:
+        real_loc = Variable(real, requires_grad=True)
+        d_real_loc = D(real_loc, mode)
+        gradients = calc_grad(d_real_loc, real_loc, None)
+        gradients = gradients.reshape(gradients.size(0), -1)
+        penalty = gradients.norm(2, dim=1).pow(2).mean() / 2.
+        return penalty
 
 class Step:
     '''
@@ -48,7 +60,7 @@ class Step:
         self.skip_count = 1
 
         self.grow_flag = False
-    
+
     def step(self):
         if not self.skip_count >= resl2num[self.current_resolution]:
             self.skip_count += 1
@@ -65,17 +77,17 @@ class Step:
             self.current_phase = 'D_transition'
         elif self.current_phase == 'D_transition':
             self.current_phase = 'D_stablization'
-        
+
         if self.current_resolution > self.max_resolution:
             return False
         else:
             return True
-    
+
     def update_G_alpha(self):
         if self.current_phase == 'G_transition':
             return True
         return False
-    
+
     def update_D_alpha(self):
         if self.current_phase == 'D_transition':
             return True
@@ -106,25 +118,25 @@ def train_wgangp(
     gp_lambda,
     drift_epsilon,
     dataset,
-    to_loader,
     policy,
     device,
-    verbose_interval=1000,
     save_interval=1000
 ):
     # NOTE: n_critic = 1
 
-    Tensor = torch.FloatTensor
-    softplus = nn.Softplus()
+    max_iters = 0
+    for v in resl2num:
+        max_iters += len(dataset) * v
 
-    losses = {
-        'D' : [],
-        'G' : []
-    }
+    status = Status(max_iters)
+    loss   = NonSaturatingLoss()
+    gploss = r1_regularizer()
+
     training_status = Step()
     optimizer_G = get_optimizer(G, resl2lr[training_status.current_resolution])
     optimizer_D = get_optimizer(D, resl2lr[training_status.current_resolution])
-    
+
+    augment = functools.partial(DiffAugment, policy=policy)
     batches_done = 0
 
     while True:
@@ -137,40 +149,40 @@ def train_wgangp(
 
         for index, image in enumerate(dataloader):
 
-            z = np.random.normal(0, 1, (image.size(0), latent_dim))
-            z = torch.from_numpy(z).type(Tensor).to(device)
+            z = sample_nnoise((image.size(0), latent_dim), device)
+            real = image.to(device)
 
-            image = image.type(Tensor).to(device)
             # generate image
-            fake_image = G(z, G_mode)
+            fake = G(z, G_mode)
 
             # DiffAugment
-            image    = DiffAugment(image, policy=policy)
-            aug_fake = DiffAugment(fake_image, policy=policy)
+            real_aug = augment(real)
+            fake_aug = augment(fake)
 
             '''
             Train Discriminator
             '''
 
-            real_prob = D(image, D_mode)
-            fake_prob = D(aug_fake.detach(), D_mode)
-            gp = calc_gradient_penalty(image.detach(), D, D_mode)
+            real_prob = D(real_aug, D_mode)
+            fake_prob = D(fake_aug.detach(), D_mode)
+            gp = gploss(real, D, D_mode)
             drift = real_prob.square().mean()
-            d_loss = softplus(-real_prob).mean() + softplus(fake_prob).mean() + (gp_lambda * gp) + (drift_epsilon * drift)
+            adv_loss = loss.d_loss(real_prob, fake_prob)
+            D_loss = adv_loss + (gp_lambda * gp) + (drift_epsilon * drift)
 
             optimizer_D.zero_grad()
-            d_loss.backward(retain_graph=True)
+            D_loss.backward(retain_graph=True)
             optimizer_D.step()
 
             '''
             Train Generator
             '''
 
-            fake_prob = D(aug_fake, D_mode)
-            g_loss = softplus(-fake_prob).mean()
+            fake_prob = D(fake_aug, D_mode)
+            G_loss = loss.g_loss(fake_prob)
 
             optimizer_G.zero_grad()
-            g_loss.backward()
+            G_loss.backward()
             optimizer_G.step()
 
 
@@ -179,19 +191,12 @@ def train_wgangp(
             if training_status.update_D_alpha():
                 D.update_alpha(delta, D_mode)
 
-            losses['G'].append(g_loss.item())
-            losses['D'].append(d_loss.item())
+            if status.batches_done % save_interval == 0:
+                save_image(
+                    fake, f'implementations/DiffAugment/result/{status.batches_done}.png'.format(batches_done),
+                    nrow=6 , normalize=True, value_range=(-1, 1))
 
-
-
-            if batches_done % verbose_interval == 0:
-                print('{:10} {:14} G LOSS : {:.5f}, D LOSS {:.5f}'.format(batches_done, training_status.current_phase, losses['G'][-1], losses['D'][-1]))
-
-            if batches_done % save_interval == 0:
-                save_image(fake_image, './implementations/DiffAugment/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
-
-            batches_done += 1
-
+            status.update(d=D_loss.item(), g=G_loss.item())
 
         is_training = training_status.step()
         if not is_training:
@@ -207,34 +212,23 @@ def train_wgangp(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-def calc_gradient_penalty(real_image, D, phase):
-    loc_real_image = Variable(real_image, requires_grad=True)
-    gradients = grad(
-        outputs=D(loc_real_image, phase)[:, 0].sum(),
-        inputs=loc_real_image,
-        create_graph=True, retain_graph=True
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    gradients = (gradients ** 2).sum(dim=1).mean()
-    return gradients / 2
-
-def add_arguments(parser):
-    parser.add_argument('--latent-dim', default=512, type=int, help='dimension of input latent')
-    parser.add_argument('--gp-lambda', default=10, type=float, help='lambda for gradient penalty')
-    parser.add_argument('--drift-epsilon', default=0.001, type=float, help='epsilon for drift')
-    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
-    return parser
+    status.plot_loss()
 
 def main(parser):
 
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            latent_dim=[512, 'input latent dim'],
+            gp_lambda=[10., 'lambda for gradient penalty'],
+            drift_epsilon=[0.001, 'epsilon for drift'],
+            policy=['color,translation', 'policy for DiffAugment']
+        )
+    )
     args = parser.parse_args()
     save_args(args)
 
     # add function for updating transform
-    class AnimeFaceDatasetAlpha(AnimeFaceDataset):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+    class AnimeFaceAlpha(AnimeFace):
         def update_transform(self, resolution):
             self.transform = transforms.Compose([
                 transforms.Resize((resolution, resolution)),
@@ -242,13 +236,10 @@ def main(parser):
                 transforms.ToTensor(),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ])
-    
-    dataset = AnimeFaceDatasetAlpha(image_size=4)
 
-    if not args.disable_gpu:
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device('cpu')
+    dataset = AnimeFaceAlpha(image_size=4)
+
+    device = get_device(not args.disable_gpu)
 
     G = Generator(style_dim=args.latent_dim)
     D = Discriminator()
@@ -257,14 +248,7 @@ def main(parser):
     D.to(device)
 
     train_wgangp(
-        latent_dim=args.latent_dim,
-        G=G,
-        D=D,
-        gp_lambda=args.gp_lambda,
-        drift_epsilon=args.drift_epsilon,
-        dataset=dataset,
-        to_loader=to_loader,
-        policy=args.policy,
-        device=device,
-        # verbose_interval=1
+        args.latent_dim, G, D, args.gp_lambda,
+        args.drift_epsilon, dataset, args.policy,
+        device, args.save
     )
