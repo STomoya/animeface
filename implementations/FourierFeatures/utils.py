@@ -9,8 +9,8 @@ from PIL import Image
 import torchvision.transforms.functional as TF
 import numpy as np
 
-from ..general import save_args, Status, get_device
-from ..gan_utils import gif_from_files
+from utils import Status, save_args, add_args, gif_from_files
+from nnutils import get_device
 
 from .model import MLP
 
@@ -45,7 +45,7 @@ def train(
 
         # updates
         loss_dict = dict(PSNR=psnr.item())
-        status.update(loss_dict)
+        status.update(**loss_dict)
     gif_from_files(
         sorted(glob.glob(f'implementations/FourierFeatures/result/*.jpg')),
         'implementations/FourierFeatures/result/train-seq.gif')
@@ -60,7 +60,7 @@ def train(
         f'implementations/FourierFeatures/result/best.jpg',
             normalize=True, value_range=(0, 1))
 
-    status.plot()
+    status.plot_loss()
 
 def prepair_data(path, target_size):
     # image
@@ -81,24 +81,19 @@ def prepair_data(path, target_size):
 
     return train_data, (input, image)
 
-def add_arguments(parser):
-    parser.add_argument('--path', default='/usr/src/data/danbooru/2020/0638/1115638.jpg', help='path to an image')
-
-    parser.add_argument('--no-map', default=False, action='store_true')
-    parser.add_argument('--map-size', default=256, type=int)
-    parser.add_argument('--map-scale', default=10., type=float)
-    parser.add_argument('--num-layers', default=4, type=int)
-    parser.add_argument('--hid-channels', default=256, type=int)
-    parser.add_argument('--act-name', default='relu', choices=['relu', 'swish'])
-    parser.add_argument('--norm-name', default=None, choices=['bn'])
-
-    parser.add_argument('--lr', default=0.001, type=float)
-    parser.add_argument('--betas', default=[0.9, 0.999], type=float, nargs=2)
-
-    return parser
-
 def main(parser):
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            path=['/usr/src/data/danbooru/2020/0638/1115638.jpg', 'path to image'],
+            no_map=[False, 'do not use fourier feature mapping'],
+            map_size=[256, 'fourier feature mapping size'],
+            map_scale=[10., 'scale for B'],
+            num_layers=[4, 'number of layers in MLP'],
+            hid_channels=[256, 'hidden channel width'],
+            act_name=['relu', 'activation function name'],
+            norm_name=['bn', 'normalization layer name'],
+            lr=[0.001, 'learning rate'],
+            betas=[[0.9, 0.999], 'betas']))
     args = parser.parse_args()
     save_args(args)
 
