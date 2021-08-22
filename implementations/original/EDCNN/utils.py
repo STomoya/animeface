@@ -120,40 +120,8 @@ def _image_grid(src, ref, gen):
         images.extend([src, ref, gen])
     return torch.cat(images, dim=0)
 
-# def add_arguments(parser: ArgumentParser):
-#     parser.add_argument('--num-test', default=6, type=int, help='number of samples in test set')
-
-#     parser.add_argument('--gray-channels', default=1, type=int, help='number of channels for gray images')
-#     parser.add_argument('--ref-channels', default=3, type=int, help='number of channels for reference images')
-#     parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-#     parser.add_argument('--style-dim', default=128, type=int, help='dimension of style code')
-#     parser.add_argument('--se-blocks-per-resl', default=1, type=int, help='number of resblocks per resolution in style encoder')
-#     parser.add_argument('--num-res-blocks', default=5, type=int, help='number of resblocks')
-#     parser.add_argument('--disable-sobel', default=False, action='store_true', help='disable sobel conv2d')
-#     parser.add_argument('--disable-learnable-sobel', default=False, action='store_true', help='disable learnable')
-#     parser.add_argument('--e-conv-per-resl', default=2, type=int, help='number of convolution layers per resolution in encoder/decoder')
-#     parser.add_argument('--disable-sn', default=False, type=int, help='disable spectral normalization')
-#     parser.add_argument('--disable-bias', default=False, type=int, help='disable bias')
-#     parser.add_argument('--norm-name', default='in', choices=['in', 'bn'], help='normalization layer name')
-#     parser.add_argument('--act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function name')
-#     parser.add_argument('--bottom-width', default=8, type=int, help='bottom width')
-#     parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-
-#     parser.add_argument('--init-func', default='N002', choices=['N002', 'xavier', 'kaiming'], help='initialization function')
-
-#     parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-#     parser.add_argument('--ttur', default=False, action='store_true', help='use TTUR')
-#     parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-#     parser.add_argument('--recon-lambda', default=10, type=float, help='lambda for reconstruction loss')
-#     parser.add_argument('--style-lambda', default=50, type=float, help='lambda for style loss')
-#     parser.add_argument('--vgg-lambda', default=10, type=float, help='lambda for vgg loss')
-#     parser.add_argument('--content-lambda', default=0, type=float, help='lambda for content loss')
-
-#     return parser
-
 def main(parser):
 
-    # parser = add_arguments(parser)
     parser = add_args(parser,
         dict(
             num_test                = [6, 'number of test samples'],

@@ -124,7 +124,7 @@ def train(
             update_lr(optimizer_D, delta)
             update_lr(optimizer_G, delta)
 
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(line, gen, num_images=6):
     lines = line.repeat(1, 3, 1, 1).chunk(line.size(0), dim=0) # convert to RGB.

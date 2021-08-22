@@ -183,21 +183,13 @@ def train(
 
     status.plot_loss()
 
-def add_arguments(parser):
-    parser.add_argument('--loss-type', default='wgan_gp', choices=['wgan_gp', 'lsgan'], help='loss type')
-    parser.add_argument('--latent-dim', default=100, type=int, help='dimension of input latent')
-    parser.add_argument('--gp-lambda', default=10, type=float, help='lambda for gradient penalty')
-    parser.add_argument('--drift-epsilon', default=0.001, type=float, help='epsilon for drift')
-    return parser
-
 def main(parser):
 
-    # parser = add_arguments(parser)
     parser = add_args(parser,
         dict(
-            latent_dim=[100, 'input latent dimension'],
-            gp_lambda=[10., 'lambda for gradient penalty'],
-            drift_epsilon=[0.001, 'eps for drift']))
+            latent_dim    = [100, 'input latent dimension'],
+            gp_lambda     = [10., 'lambda for gradient penalty'],
+            drift_epsilon = [0.001, 'eps for drift']))
     args = parser.parse_args()
     save_args(args)
 

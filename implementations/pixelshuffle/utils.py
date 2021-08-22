@@ -1,14 +1,11 @@
 
-from __future__ import division
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision.utils import save_image
-import numpy as np
 
 from .model import Generator, Discriminator, weights_init_normal
 
-# from ..general import LabeledAnimeFaceDataset, to_loader
 from dataset import AnimeFaceLabel
 from utils import Status, add_args, save_args
 from nnutils import sample_nnoise, get_device
@@ -88,7 +85,7 @@ def main(parser):
 
     parser = add_args(parser,
         dict(
-            latent_dim=[200]))
+            latent_dim = [200]))
     args = parser.parse_args()
     save_args(args)
 

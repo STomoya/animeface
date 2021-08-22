@@ -121,9 +121,9 @@ def main(parser):
 
     parser = add_args(parser,
         dict(
-            lr=[0.0005, 'learning rate'],
-            betas=[[0.5, 0.999], 'betas'],
-            pixelwise_gamma=[100., 'gamma for l1 loss']))
+            lr              = [0.0005, 'learning rate'],
+            betas           = [[0.5, 0.999], 'betas'],
+            pixelwise_gamma = [100., 'gamma for l1 loss']))
     parser.set_defaults(image_size=256)
     args = parser.parse_args()
     save_args(args)

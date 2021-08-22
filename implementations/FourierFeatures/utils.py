@@ -84,16 +84,16 @@ def prepair_data(path, target_size):
 def main(parser):
     parser = add_args(parser,
         dict(
-            path=['/usr/src/data/danbooru/2020/0638/1115638.jpg', 'path to image'],
-            no_map=[False, 'do not use fourier feature mapping'],
-            map_size=[256, 'fourier feature mapping size'],
-            map_scale=[10., 'scale for B'],
-            num_layers=[4, 'number of layers in MLP'],
-            hid_channels=[256, 'hidden channel width'],
-            act_name=['relu', 'activation function name'],
-            norm_name=['bn', 'normalization layer name'],
-            lr=[0.001, 'learning rate'],
-            betas=[[0.9, 0.999], 'betas']))
+            path         = ['/usr/src/data/danbooru/2020/0638/1115638.jpg', 'path to image'],
+            no_map       = [False, 'do not use fourier feature mapping'],
+            map_size     = [256, 'fourier feature mapping size'],
+            map_scale    = [10., 'scale for B'],
+            num_layers   = [4, 'number of layers in MLP'],
+            hid_channels = [256, 'hidden channel width'],
+            act_name     = ['relu', 'activation function name'],
+            norm_name    = ['bn', 'normalization layer name'],
+            lr           = [0.001, 'learning rate'],
+            betas        = [[0.9, 0.999], 'betas']))
     args = parser.parse_args()
     save_args(args)
 
