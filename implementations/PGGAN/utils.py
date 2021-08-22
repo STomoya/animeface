@@ -1,16 +1,18 @@
 
+from functools import partial
+
 import torch
-import torch.nn as nn
 import torch.optim as optim
-import torch.autograd as autograd
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
-import numpy as np
+
+from dataset import AnimeFace, to_loader
+from utils import Status, save_args, add_args
+from nnutils.loss import WGANLoss, gradient_penalty
+from nnutils import get_device, sample_nnoise
 
 from .config import *
 from .model import Generator, Discriminator
-
-from ..general import AnimeFaceDataset, to_loader, save_args
 
 class Step:
     '''
@@ -46,7 +48,7 @@ class Step:
         self.skip_count = 1
 
         self.grow_flag = False
-    
+
     def step(self):
         if not self.skip_count >= resl2num[self.current_resolution]:
             self.skip_count += 1
@@ -63,7 +65,7 @@ class Step:
             self.current_phase = 'D_transition'
         elif self.current_phase == 'D_transition':
             self.current_phase = 'D_stablization'
-        
+
         if self.current_resolution > self.max_resolution:
             return False
         else:
@@ -92,140 +94,25 @@ def calc_magnitude(last_d, real_prob):
     magnitude = 0.2 * (max(0, d - 0.5) ** 2)
     return magnitude, d
 
-def train_lsgan(
-    latent_dim,
-    G,
-    D,
-    criterion,
-    dataset,
-    to_loader,
-    device,
-    verbose_interval=1000,
-    save_interval=1000
-):
-
-    Tensor = torch.FloatTensor
-
-    last_d = 0
-
-    losses = {
-        'D' : [],
-        'G' : []
-    }
-    training_status = Step()
-    optimizer_G = get_optimizer(G, resl2lr[training_status.current_resolution])
-    optimizer_D = get_optimizer(D, resl2lr[training_status.current_resolution])
-    
-    batches_done = 0
-
-    while True:
-        G_mode, D_mode = training_status.get_mode()
-
-        dataset.update_transform(training_status.current_resolution)
-        dataloader = to_loader(dataset, resl2batch_size[training_status.current_resolution])
-
-        delta = calc_alpha_delta(len(dataset), training_status.current_resolution)
-
-        for index, image in enumerate(dataloader):
-            # label smoothing
-            valid = (1.0 - 0.7) * np.random.randn(image.size(0), 1) + 0.7
-            valid = torch.from_numpy(valid).type(Tensor).to(device)
-            fake  = (0.3 - 0.0) * np.random.randn(image.size(0), 1) + 0.0
-            fake  = torch.from_numpy(fake).type(Tensor).to(device)
-
-            z = np.random.normal(0, 1, (image.size(0), latent_dim))
-            z = torch.from_numpy(z).type(Tensor).to(device)
-
-            image = image.type(Tensor).to(device)
-
-            # generate image
-            fake_image = G(z, G_mode)
-
-            '''
-            Train Discriminator
-            '''
-
-            real_prob = D(image, D_mode)
-            fake_prob = D(fake_image.detach(), D_mode)
-            real_loss = criterion(real_prob, valid)
-            fake_loss = criterion(fake_prob, fake)
-            d_loss = (real_loss + fake_loss) / 2
-
-            optimizer_D.zero_grad()
-            d_loss.backward()
-            optimizer_D.step()
-
-            magnitude, last_d = calc_magnitude(last_d, real_prob=real_prob)
-            D.update_noise(magnitude)
-
-            '''
-            Train Generator
-            '''
-
-            fake_prob = D(fake_image, D_mode)
-            g_loss = criterion(fake_prob, valid)
-
-            optimizer_G.zero_grad()
-            g_loss.backward()
-            optimizer_G.step()
-
-
-            G.update_alpha(delta, G_mode)
-            D.update_alpha(delta, D_mode)
-
-            losses['G'].append(g_loss.item())
-            losses['D'].append(d_loss.item())
-
-
-
-            if batches_done % verbose_interval == 0:
-                print('{:10} {:14} G LOSS : {:.5f}, D LOSS {:.5f}'.format(batches_done, training_status.current_phase, losses['G'][-1], losses['D'][-1]))
-
-            if batches_done % save_interval == 0:
-                save_image(fake_image, './implementations/PGGAN/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
-
-            batches_done += 1
-
-
-        is_training = training_status.step()
-        if not is_training:
-            break
-
-        if training_status.should_grow():
-            G.grow()
-            D.grow()
-            optimizer_G = get_optimizer(G, resl2lr[training_status.current_resolution])
-            optimizer_D = get_optimizer(D, resl2lr[training_status.current_resolution])
-            G.to(device)
-            D.to(device)
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-def train_wgangp(
-    latent_dim,
-    G,
-    D,
-    gp_lambda,
-    drift_epsilon,
-    dataset,
-    to_loader,
-    device,
-    verbose_interval=1000,
-    save_interval=1000
+def train(
+    latent_dim, dataset, to_loader,
+    G, D,
+    gp_lambda, drift_epsilon,
+    device, save_interval=1000
 ):
     # NOTE: n_critic = 1
 
-    Tensor = torch.FloatTensor
-
-    losses = {
-        'D' : [],
-        'G' : []
-    }
     training_status = Step()
     optimizer_G = get_optimizer(G, resl2lr[training_status.current_resolution])
     optimizer_D = get_optimizer(D, resl2lr[training_status.current_resolution])
-    
-    batches_done = 0
+
+    max_iters = 0
+    for v in resl2num:
+        max_iters += len(dataset) * v
+
+    status = Status(max_iters)
+    loss   = WGANLoss()
+    gp     = gradient_penalty()
 
     while True:
         G_mode, D_mode = training_status.get_mode()
@@ -237,56 +124,48 @@ def train_wgangp(
 
         for index, image in enumerate(dataloader):
 
-            z = np.random.normal(0, 1, (image.size(0), latent_dim))
-            z = torch.from_numpy(z).type(Tensor).to(device)
-
-            image = image.type(Tensor).to(device)
+            z = sample_nnoise((image.size(0), latent_dim), device)
+            real = image.to(device)
 
             # generate image
-            fake_image = G(z, G_mode)
+            fake = G(z, G_mode)
 
             '''
             Train Discriminator
             '''
 
-            real_prob = D(image, D_mode)
-            fake_prob = D(fake_image.detach(), D_mode)
-            gp = calc_gradient_penalty(D, image, fake_image, D_mode, device)
+            real_prob = D(real, D_mode)
+            fake_prob = D(fake.detach(), D_mode)
+            adv_loss = loss.d_loss(real_prob, fake_prob)
+            gp_loss = gp(real, fake, partial(D, phase=D_mode), None)
             drift = real_prob.square().mean()
-            d_loss = - real_prob.mean() + fake_prob.mean() + (gp_lambda * gp) + (drift_epsilon * drift)
+            D_loss = adv_loss + (gp_lambda * gp_loss) + (drift_epsilon * drift)
 
             optimizer_D.zero_grad()
-            d_loss.backward(retain_graph=True)
+            D_loss.backward(retain_graph=True)
             optimizer_D.step()
 
             '''
             Train Generator
             '''
 
-            fake_prob = D(fake_image, D_mode)
-            g_loss = - fake_prob.mean()
+            fake_prob = D(fake, D_mode)
+            G_loss = loss.g_loss(fake_prob)
 
             optimizer_G.zero_grad()
-            g_loss.backward()
+            G_loss.backward()
             optimizer_G.step()
 
 
             G.update_alpha(delta, G_mode)
             D.update_alpha(delta, D_mode)
 
-            losses['G'].append(g_loss.item())
-            losses['D'].append(d_loss.item())
+            if status.batches_done % save_interval == 0:
+                save_image(
+                    fake, f'implementations/PGGAN/result/{status.batches_done}.png',
+                    nrow=6 , normalize=True, value_range=(-1, 1))
 
-
-
-            if batches_done % verbose_interval == 0:
-                print('{:10} {:14} G LOSS : {:.5f}, D LOSS {:.5f}'.format(batches_done, training_status.current_phase, losses['G'][-1], losses['D'][-1]))
-
-            if batches_done % save_interval == 0:
-                save_image(fake_image, './implementations/PGGAN/result/{}.png'.format(batches_done), nrow=6 , normalize=True)
-
-            batches_done += 1
-
+            status.update(d=D_loss.item(), g=G_loss.item())
 
         is_training = training_status.step()
         if not is_training:
@@ -302,28 +181,7 @@ def train_wgangp(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-def calc_gradient_penalty(D, real_image, fake_image, mode, device):
-    alpha = torch.from_numpy(np.random.random((real_image.size(0), 1, 1, 1)))
-    alpha = alpha.type(torch.FloatTensor).to(device)
-
-    interpolates = (alpha * real_image + ((1 - alpha) * fake_image)).requires_grad_(True)
-    d_interpolates = D(interpolates, mode)
-
-    fake = torch.Tensor(real_image.size(0), 1).fill_(1.).requires_grad_(False)
-    fake = fake.type(torch.FloatTensor).to(device)
-
-    gradients = autograd.grad(
-        outputs=d_interpolates.view(d_interpolates.size(0), 1),
-        inputs=interpolates,
-        grad_outputs=fake,
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-
-    return penalty
+    status.plot_loss()
 
 def add_arguments(parser):
     parser.add_argument('--loss-type', default='wgan_gp', choices=['wgan_gp', 'lsgan'], help='loss type')
@@ -334,12 +192,17 @@ def add_arguments(parser):
 
 def main(parser):
 
-    parser = add_arguments(parser)
+    # parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            latent_dim=[100, 'input latent dimension'],
+            gp_lambda=[10., 'lambda for gradient penalty'],
+            drift_epsilon=[0.001, 'eps for drift']))
     args = parser.parse_args()
     save_args(args)
 
     # add function for updating transform
-    class AnimeFaceDatasetAlpha(AnimeFaceDataset):
+    class AnimeFaceDatasetAlpha(AnimeFace):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
         def update_transform(self, resolution):
@@ -349,40 +212,19 @@ def main(parser):
                 transforms.ToTensor(),
                 transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
             ])
-    
+
     dataset = AnimeFaceDatasetAlpha(image_size=4)
 
-    if not args.disable_gpu:
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device('cpu')
+    device = get_device(not args.disable_gpu)
 
     G = Generator(latent_dim=args.latent_dim)
-    D = Discriminator(loss_type=args.loss_type)
+    D = Discriminator()
 
     G.to(device)
     D.to(device)
 
-    if args.loss_type == 'lsgan':
-        criterion = nn.MSELoss()
-
-        train_lsgan(
-            latent_dim=args.latent_dim,
-            G=G,
-            D=D,
-            criterion=criterion,
-            dataset=dataset,
-            to_loader=to_loader,
-            device=device,
-        )
-    else:
-        train_wgangp(
-            latent_dim=args.latent_dim,
-            G=G,
-            D=D,
-            gp_lambda=args.gp_lambda,
-            drift_epsilon=args.drift_epsilon,
-            dataset=dataset,
-            to_loader=to_loader,
-            device=device
-        )
+    train(
+        args.latent_dim, dataset, to_loader,
+        G, D, args.gp_lambda, args.drift_epsilon,
+        device, args.save
+    )

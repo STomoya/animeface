@@ -34,16 +34,14 @@ class MiniBatchStd(nn.Module):
         return torch.cat([x, std], dim=1)
 
 class GaussianNoise(nn.Module):
-    def __init__(self, resl, loss_type):
+    def __init__(self, resl):
         super(GaussianNoise, self).__init__()
-        self.loss_type = loss_type
         self.magnitude = 0
         self.noise = Variable(torch.zeros(resl, resl)).cuda()
     def forward(self, x):
-        if self.loss_type == 'lsgan':
-            if self.training:
-                self.noise.data.normal_(0, std=0.1)
-                x = x + (self.magnitude * self.noise)
+        if self.training:
+            self.noise.data.normal_(0, std=0.1)
+            x = x + (self.magnitude * self.noise)
         return x
 
 class Conv2d(nn.Module):
@@ -126,7 +124,7 @@ class ToRGB(nn.Module):
             ),
             nn.Tanh()
         )
-    
+
     def forward(self, x):
         x = self.to_rgb(x)
         return x
@@ -148,7 +146,7 @@ class FromRGB(nn.Module):
                 kernel_size=1
             )
         )
-    
+
     def forward(self, x):
         x = self.from_rgb(x)
         return x
@@ -211,7 +209,6 @@ class DownResolutionBlock(nn.Module):
         resl,
         in_channels,
         out_channels,
-        loss_type,
         is_last=False
     ):
         super(DownResolutionBlock, self).__init__()
@@ -219,7 +216,7 @@ class DownResolutionBlock(nn.Module):
         if is_last:
             self.block = nn.Sequential(
                 MiniBatchStd(),
-                GaussianNoise(resl, loss_type),
+                GaussianNoise(resl),
                 Conv2d(
                     in_channels=in_channels+1,
                     out_channels=out_channels,
@@ -227,7 +224,7 @@ class DownResolutionBlock(nn.Module):
                     padding=1
                 ),
                 nn.LeakyReLU(0.2),
-                GaussianNoise(resl, loss_type),
+                GaussianNoise(resl),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
@@ -242,7 +239,7 @@ class DownResolutionBlock(nn.Module):
             )
         else:
             self.block = nn.Sequential(
-                GaussianNoise(resl, loss_type),
+                GaussianNoise(resl),
                 Conv2d(
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -250,7 +247,7 @@ class DownResolutionBlock(nn.Module):
                     padding=1
                 ),
                 nn.LeakyReLU(0.2),
-                GaussianNoise(resl, loss_type),
+                GaussianNoise(resl),
                 Conv2d(
                     in_channels=out_channels,
                     out_channels=out_channels,
@@ -313,7 +310,7 @@ class Generator(nn.Module):
             return self.transition_forward(x)
         else:
             return self.stablization_forward(x)
-    
+
     def transition_forward(self, x):
         for index, block in enumerate(self.resolution_blocks):
             x = block(x)
@@ -331,7 +328,7 @@ class Generator(nn.Module):
             x = block(x)
             if index == self.train_depth:
                 break
-        
+
         rgb = self.rgb_layers[index](x)
         return rgb
 
@@ -340,7 +337,7 @@ class Generator(nn.Module):
             self.alpha = min(1, self.alpha+delta)
 
 class Discriminator(nn.Module):
-    def __init__(self, loss_type):
+    def __init__(self):
         super(Discriminator, self).__init__()
         self.train_depth = 0
 
@@ -362,7 +359,6 @@ class Discriminator(nn.Module):
                     resl=resl,
                     in_channels=param[0],
                     out_channels=param[1],
-                    loss_type=loss_type,
                     is_last=param[2]
                 )
             )
@@ -382,7 +378,7 @@ class Discriminator(nn.Module):
             return self.transition_forward(x)
         else:
             return self.stablization_forward(x)
-    
+
     def transition_forward(self, x):
         size = x.size(2)
 
@@ -399,7 +395,7 @@ class Discriminator(nn.Module):
         return x.view(x.size(0), -1)
 
     def stablization_forward(self, x):
-        
+
         x = self.rgb_layers[self.train_depth](x)
         for block in self.resolution_blocks[self.train_depth::-1]:
             x = block(x)
@@ -418,7 +414,7 @@ class Discriminator(nn.Module):
 
 if __name__ == "__main__":
     G = Generator(100).cuda()
-    D = Discriminator('wgan_gp').cuda()
+    D = Discriminator().cuda()
     for _ in range(5):
         G.grow()
         D.grow()
