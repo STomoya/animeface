@@ -5,8 +5,8 @@ Dataset with multiple categories
 import os
 import csv
 
-from ..general.dataset_base import Image, make_default_transform
-from ..general import to_loader
+from dataset._base import Image, make_default_transform
+from dataset import to_loader
 
 def _read_csv(filename):
     '''read csv file'''
@@ -23,7 +23,7 @@ def _split_to_tags(label_file):
     for path, tag in data_list:
         image_paths[unique_labels.index(tag)].append(path)
     return image_paths, unique_labels
-    
+
 class Tag(Image):
     def __init__(self, image_paths, image_size, resize_ratio=1., transform=None):
         if transform is None:
@@ -32,7 +32,6 @@ class Tag(Image):
             )
         super().__init__(transform)
         self.images = image_paths
-        self.length = len(self.images)
     def _load(self):
         return []
 
@@ -45,7 +44,7 @@ class Category:
         self.loaders = [
             to_loader(
                 Tag(images, image_size, resize_ratio, transform),
-                batch_size, num_workers=num_workers, use_gpu=False)
+                batch_size, num_workers=num_workers, pin_memory=False)
             for images in image_paths
         ]
         self.iterable = [iter(loader) for loader in self.loaders]
@@ -113,7 +112,7 @@ class _CategoricalInfiniteLoader:
         self.num_tags = [cat.num_tags for cat in self.category]
     def sample(self, i, j):
         return self.category[i].sample(j)
-    
+
     def __len__(self):
         return self.length
 
