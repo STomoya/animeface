@@ -6,10 +6,11 @@ import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
-from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..general import Status, get_device, save_args
-from ..gan_utils import sample_nnoise, DiffAugment, init, update_ema
-from ..gan_utils.losses import HingeLoss, GradPenalty
+from dataset import AnimeFace, DanbooruPortrait
+from utils import Status, save_args, add_args
+from nnutils import get_device, sample_nnoise, init, update_ema
+from nnutils.loss import HingeLoss, r1_regularizer
+from thirdparty.diffaugment import DiffAugment
 
 from .model import Generator, Discriminator
 
@@ -32,10 +33,10 @@ def train(
     augment,
     device, amp, save=1000
 ):
-    
+
     status = Status(max_iters)
     loss   = HingeLoss()
-    gp     = GradPenalty()
+    gp     = r1_regularizer()
     scaler = GradScaler() if amp else None
 
     while status.batches_done < max_iters:
@@ -62,7 +63,7 @@ def train(
                 # loss
                 adv_loss = loss.d_loss(real_prob, fake_prob)
                 if gp_lambda > 0:
-                    gp_loss = gp.r1_regularizer(real, D, scaler) * gp_lambda
+                    gp_loss = gp(real, D, scaler) * gp_lambda
                 else: gp_loss = 0
 
                 D_loss = adv_loss + gp_loss
@@ -84,7 +85,7 @@ def train(
                     ortho_loss = orthogonal_regularizer(G) * ortho_lambda
                 else: ortho_loss = 0
                 G_loss = adv_loss + ortho_loss
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -119,47 +120,39 @@ def train(
             loss_dict = dict(
                 G=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0,
                 D=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0)
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
-    
-    status.plot()
-            
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=16, type=int, help='number of const for eval')
-    parser.add_argument('--const-z', default=False, action='store_true', help='subspace input will be const too.')
-    parser.add_argument('--image-channels', default=3, type=int, help='channels of output/real images')
-    # G
-    parser.add_argument('--eps-dim', default=512, type=int, help='channels of eps input')
-    parser.add_argument('--latent-dim', default=6, type=int, help='channels of subspace input')
-    parser.add_argument('--bottom-width', default=4, type=int, help='bottom width of features in model')
-    parser.add_argument('--g-channels', default=32, type=int, help='channel width multiplier for G')
-    parser.add_argument('--g-max-channels', default=512, type=int, help='maximum channel width in G')
-    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='disable spectral norm in G')
-    parser.add_argument('--g-disable-bias', default=False, action='store_true', help='disable bias in G')
-    parser.add_argument('--g-norm-name', default='in', choices=['in', 'bn'], help='normalization layer name in G')
-    parser.add_argument('--g-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name in G')
-    # D
-    parser.add_argument('--d-channels', default=32, type=int, help='channel width multiplier for D')
-    parser.add_argument('--d-max-channels', default=512, type=int, help='maximum channel width in D')
-    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='disable spectral norm in D')
-    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='disable bias in D')
-    parser.add_argument('--d-norm-name', default='in', choices=['in', 'bn'], help='normalization layer name in D')
-    parser.add_argument('--d-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name in D')
 
-    # training
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-    parser.add_argument('--gp-lambda', default=0, type=float, help='lambda for gradient penalty')
-    parser.add_argument('--ortho-lambda', default=1, type=float, help='lambda for orthogonal regularization to U')
-    parser.add_argument('--policy', default='color,translation', help='policy for Diffaugment')
-    # exprimental
-    parser.add_argument('--ema', default=False, action='store_true', help='use EMA')
-    return parser
+    status.plot_loss()
 
 def main(parser):
-    
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            num_test       = [16, 'number of const for eval'],
+            const_z        = [False, 'subspace input will be const'],
+            image_channels = [3, 'image channels'],
+            eps_dim        = [512, 'channels of eps input'],
+            latent_dim     = [6, 'channels of subspace input'],
+            bottom_width   = [4, 'bottom width'],
+            g_channels     = [32, 'channel width multiplier'],
+            g_max_channels = [512, 'maximum channel width'],
+            g_disable_sn   = [False, 'disable spectral norm'],
+            g_disable_bias = [False, 'disable bias'],
+            g_norm_name    = ['in', 'normalization layer name'],
+            g_act_name     = ['lrelu', 'activation function name'],
+            d_channels     = [32, 'channel width multiplier'],
+            d_max_channels = [512, 'maximum channel width'],
+            d_disable_sn   = [False, 'disable spectral norm'],
+            d_disable_bias = [False, 'disable bias'],
+            d_norm_name    = ['in', 'normalization layer name'],
+            d_act_name     = ['lrelu', 'activation function name'],
+            lr             = [0.0002, 'learning rate'],
+            betas          = [[0.5, 0.999], 'betas'],
+            gp_lambda      = [0., 'lambda for r1'],
+            ortho_lambda   = [1., 'lambda for orthogonal regularization'],
+            policy         = ['color,translation', 'policy for diffaugment'],
+            ema            = [False, 'use EMA']))
     args = parser.parse_args()
     save_args(args)
 
@@ -168,10 +161,13 @@ def main(parser):
 
     # data
     if args.dataset == 'animeface':
-        dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
+        dataset = AnimeFace.asloader(
+            args.batch_size, (args.image_size, args.min_year),
+            pin_memory=not args.disable_gpu)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitDataset(args.image_size, num_images=args.num_images)
-    dataset = to_loader(dataset, args.batch_size)
+        dataset = DanbooruPortrait.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
 
     sampler = functools.partial(sample_nnoise, device=device)
     const_eps = sampler((args.num_test, args.eps_dim))
@@ -213,7 +209,7 @@ def main(parser):
             param.requires_grad = False
         update_ema(G, G_ema, 0)
     else: G_ema = None
-    
+
     # optimizers
     optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=args.betas)
     optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=args.betas)
