@@ -23,7 +23,7 @@ class AnimePhotoSeparate(ImageImage):
     def __init__(self, image_size, anime='animeface', transform=None) -> None:
         self._anime_image_type = anime
         if transform is None:
-            transform = make_default_transform(image_size)
+            transform = make_default_transform(image_size, 1.2)
         super().__init__(transform)
     def _load(self):
         if self._anime_image_type == 'animeface':
