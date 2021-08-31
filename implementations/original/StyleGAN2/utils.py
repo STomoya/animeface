@@ -19,6 +19,7 @@ from .model import (
     EqualizedLinearAct,
     EqualizedConv2dAct)
 from .dataset import (
+    XDoG,
     AnimePhoto,
     AnimePhotoSeparate)
 
@@ -168,6 +169,7 @@ def main(parser):
     # experiments
     parser = add_args(parser,
         dict(
+            xdog            = [False, 'XDoG'],
             with_photo      = [False, 'train model with anime+photos'],
             separate        = [False, 'train mode with anime+photo separately']))
 
@@ -188,6 +190,11 @@ def main(parser):
         dataset = AnimePhoto.asloader(
             args.batch_size, (args.image_size, args.dataset),
             pin_memory=not args.disable_gpu)
+    elif args.xdog:
+        dataset = XDoG.asloader(
+            args.batch_size, (args.image_size, args.dataset, args.num_images),
+            pin_memory=not args.disable_gpu)
+        args.image_channels = 1
     elif args.dataset == 'animeface':
         dataset = AnimeFace.asloader(
             args.batch_size, (args.image_size, args.min_year),
