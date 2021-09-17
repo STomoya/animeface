@@ -9,10 +9,11 @@ from torch.cuda.amp import autocast, GradScaler
 
 from .model import Generator, Discriminator, init_weight_ortho
 
-from implementations.general import AnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from implementations.gan_utils import sample_nnoise, DiffAugment, update_ema
-from implementations.general import get_device, Status, save_args
-from implementations.gan_utils.losses import HingeLoss
+from dataset import AnimeFace, DanbooruPortrait
+from utils import Status, add_args, save_args
+from nnutils import sample_nnoise, update_ema, get_device
+from nnutils.loss import HingeLoss
+from thirdparty.diffaugment import DiffAugment
 
 consistency = nn.MSELoss()
 
@@ -99,14 +100,14 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
 
-    status.plot()
+    status.plot_loss()
 
 def add_arguments(parser):
     parser.add_argument('--channels', default=64, type=int, help='channel width multiplier')
@@ -133,50 +134,44 @@ def add_arguments(parser):
 
 def main(parser):
 
-    parser = add_arguments(parser)
+    # parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            channels        = [64, 'channel_width, multiplier'],
+            deep            = [False, 'deep model'],
+            z_dim           = [120, 'input latent dim'],
+            g_disable_sn    = [False, 'disable spectral norm'],
+            g_att_name      = ['se', 'attention name'],
+            g_act_name      = ['relu', 'activation function name'],
+            g_norm_name     = ['bn', 'normalization layer name'],
+            d_disable_sn    = [False, 'disable spectral norm'],
+            d_att_name      = ['se', 'attention name'],
+            d_act_name      = ['relu', 'activation function name'],
+
+            g_lr            = [0.00005, 'learning rate for G'],
+            d_lr            = [0.0002, 'learning rate for D'],
+            betas           = [[0., 0.999], 'betas'],
+
+            # when real_lambda >  0 and fake_lambda <= 0 and latent* <= 0 : CR
+            # when real_lambda >  0 and fake_lambda >  0 and latent* <= 0 : bCR
+            # when real_lambda <= 0 and fake_lambda <= 0 and latent* >  0 : zCR
+            # when real_lambda >  0 and fake_lambda >  0 and latent* >  0 : ICR
+            real_lambda     = [10., 'lambda for consistency regularization on real'],
+            fake_lambda     = [10., 'lambda for consistency regularization on fake'],
+            latent_d_lambda = [5., 'lambda for latent consistency regularization on D'],
+            latent_g_lambda = [0.5, 'lambda for latent consistency regularization on G'],
+            noise_sigma     = [0.03, 'sigma for added noise in latent consistency regularization'],
+
+            policy          = ['color,translation', 'policy for diffaugmnet']))
     args = parser.parse_args()
     args.name = args.name.replace('.', '/')
     save_args(args)
 
-    # params
-    # data
-    # image_size = 128
-    # batch_size = 10
-    # num_images = 60000
-
-    # model
-    # channels = 64
-    # deep = False
-    # z_dim = 120
-    # g
     g_use_sn = not args.g_disable_sn
-    # g_att_name = 'se'
-    # g_act_name = 'relu'
-    # g_norm_name = 'bn'
-    # d
     d_use_sn = not args.d_disable_sn
-    # d_att_name = 'se'
-    # d_act_name = 'relu'
-
-    # training
-    # max_iters = -1
-    # d_lr = 2e-4
-    # g_lr = 5e-5
-    betas = (args.beta1, args.beta2)
-    # when real_lambda >  0 and fake_lambda <= 0 and latent* <= 0 : CR
-    # when real_lambda >  0 and fake_lambda >  0 and latent* <= 0 : bCR
-    # when real_lambda <= 0 and fake_lambda <= 0 and latent* >  0 : zCR
-    # when real_lambda >  0 and fake_lambda >  0 and latent* >  0 : ICR 
-    # real_lambda = 10.
-    # fake_lambda = 10.
-    # latent_d_lambda = 5.
-    # latent_g_lambda = 0.5
-    # noise_sigma = 0.03
-    # policy = 'translation'
 
     amp = not args.disable_amp
     device = get_device(not args.disable_gpu)
-
 
     # models
     G = Generator(
@@ -197,24 +192,29 @@ def main(parser):
     D.to(device)
 
     # dataset
-    # dataset = AnimeFaceDataset(image_size)
-    dataset = DanbooruPortraitDataset(args.image_size, num_images=args.num_images)
-    dataset = to_loader(dataset, args.batch_size)
+    if args.dataset == 'animeface':
+        dataset = AnimeFace.asloader(
+            args.batch_size, (args.image_size, args.min_year),
+            pin_memory=not args.disable_gpu)
+    elif args.dataset == 'danbooru':
+        dataset = DanbooruPortrait.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
 
     if args.max_iters < 0:
-        args.max_iters = len(dataset) * 100
+        args.max_iters = len(dataset) * args.default_epochs
 
     sampler = functools.partial(sample_nnoise, device=device)
     noise   = functools.partial(sample_nnoise, std=args.noise_sigma, device=device)
     const_z = sample_nnoise((16, args.z_dim), device=device)
 
     # optimizers
-    optimizer_G = optim.Adam(G.parameters(), lr=args.g_lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=args.d_lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.g_lr, betas=args.betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.d_lr, betas=args.betas)
 
     train(
         args.max_iters, dataset, sampler, noise, args.z_dim, const_z,
         G, G_ema, D, optimizer_G, optimizer_D,
         args.policy, args.real_lambda, args.fake_lambda, args.latent_d_lambda, args.latent_g_lambda,
-        device, amp, 1000
+        device, amp, args.save
     )

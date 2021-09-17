@@ -2,19 +2,20 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.autograd as autograd
-from torch.autograd import grad, Variable
 from torchvision.utils import save_image
-import numpy as np
+
+from utils import save_args, add_args, Status
+from nnutils import get_device
+from nnutils.loss import gradient_penalty, NonSaturatingLoss
+from tqdm import tqdm
 
 from .model import Generator, Discriminator
-from ..general import save_args
 
 def load_real(
     image_path, device,
     max_size=250, min_size=25, scale_factor=0.75, save_samples=True
 ):
-    
+
     sizes = []
     tmp_size = max_size
     while tmp_size > min_size:
@@ -29,7 +30,7 @@ def load_real(
             T.ToTensor(),
             T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])
-    
+
     from PIL import Image
     reals = []
     xy_sizes = []
@@ -46,7 +47,7 @@ def load_real(
 
         if save_samples:
             save_image(reals[-1], './SinGAN/result/sample_{}x{}.png'.format(*xy_sizes[-1]), normalize=True)
-    
+
     return reals, xy_sizes
 
 def test_sizes(max_size, num_scale, scale_factor, width_scale=1):
@@ -55,41 +56,6 @@ def test_sizes(max_size, num_scale, scale_factor, width_scale=1):
         sizes.append((round(max_size *scale_factor ** scale), round((max_size * scale_factor ** scale) * width_scale)))
     return sorted(sizes)
 
-def calc_gradient_penalty_one(D, real_image, fake_image, device):
-    alpha = torch.from_numpy(np.random.random((real_image.size(0), 1, 1, 1)))
-    alpha = alpha.type(torch.FloatTensor).to(device)
-
-    interpolates = (alpha * real_image + ((1 - alpha) * fake_image)).requires_grad_(True)
-    d_interpolates = D.forward(interpolates)
-
-    fake = torch.Tensor(d_interpolates.size()).fill_(1.).requires_grad_(False)
-    fake = fake.type(torch.FloatTensor).to(device)
-
-    gradients = autograd.grad(
-        outputs=d_interpolates,
-        inputs=interpolates,
-        grad_outputs=fake,
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-
-    return penalty
-
-
-def calc_gradient_penalty_zero(D, real_image):
-    loc_real_image = Variable(real_image, requires_grad=True)
-    gradients = grad(
-        outputs=D.forward(loc_real_image)[:, 0].sum(),
-        inputs=loc_real_image,
-        create_graph=True, retain_graph=True
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    gradients = (gradients ** 2).sum(dim=1).mean()
-    return gradients / 2
-
 def train(
     epochses, G_step, D_step,
     G, D,
@@ -97,20 +63,15 @@ def train(
     lr, betas,
     rec_criterion, gp_type,
     gp_lambda, rec_alpha,
-    save_interval, verbose_interval
+    save_interval
 ):
 
-    if gp_type == 'one':
-        def empty(x):
-            return x
-        out_func = empty
-    elif gp_type == 'zero':
-        out_func = nn.Softplus()
-    else:
-        raise Exception('no such type \'{}\'.'.format(gp_type))
+    status  = Status(sum(epochses))
+    loss    = NonSaturatingLoss()
+    calc_gp = gradient_penalty()
 
     for scale, epochs in enumerate(epochses):
-        print('Scale {:2} / {:2}'.format(scale+1, len(epochses)))
+        tqdm.write('Scale {:2} / {:2}'.format(scale+1, len(epochses)))
 
         # optimizers
         optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=betas)
@@ -122,24 +83,20 @@ def train(
             Discriminator
             '''
             for j in range(D_step):
-                # D(x)
-                real_prob = D.forward(reals[scale])
-                real_loss = out_func(- real_prob).mean()
                 # D(G(z))
                 fake = G.forward()
+                # D(x)
+                real_prob = D.forward(reals[scale])
                 fake_prob = D.forward(fake.detach())
-                fake_loss = out_func(fake_prob).mean()
-                # gradient penalty
-                if gp_type == 'zero':
-                    gp = calc_gradient_penalty_zero(D, reals[scale])
-                elif gp_type == 'one':
-                    gp = calc_gradient_penalty_one(D, reals[scale], fake, device=D.device)
-                # total
-                D_loss = real_loss + fake_loss + gp * gp_lambda
+
+                # loss
+                adv_loss = loss.d_loss(real_prob, fake_prob)
+                gp_loss  = calc_gp(reals[scale], fake.detach(), D.forward, None, gp_type) * gp_lambda
+                D_loss = adv_loss + gp_loss
 
                 # optimization
                 optimizer_D.zero_grad()
-                D_loss.backward(retain_graph=True)
+                D_loss.backward()
                 optimizer_D.step()
 
             '''
@@ -148,24 +105,24 @@ def train(
             for j in range(G_step):
                 # D(G(z))
                 fake = G.forward()
-                real_prob = D.forward(fake)
-                real_loss = out_func(- real_prob).mean()
-                # reconstruction loss
                 rec_fake = G.forward(rec=True)
+                fake_prob = D.forward(fake)
+
+                # loss
+                adv_loss = loss.g_loss(fake_prob)
                 rec_loss = rec_criterion(rec_fake, reals[scale])
                 # total
-                G_loss = real_loss + rec_loss * rec_alpha
+                G_loss = adv_loss + rec_loss * rec_alpha
 
                 # optimization
                 optimizer_G.zero_grad()
                 G_loss.backward(retain_graph=True)
                 optimizer_G.step()
 
+            if status.batches_done % save_interval == 0:
+                save_image(fake, f'./implementations/SinGAN/result/{scale}_{epoch}.jpg', normalize=True, value_range=(-1, 1))
 
-            if epoch % verbose_interval == 0:
-                print('{:3} / {:3} [G : {:.5f}] [D : {:.5f}]'.format(epoch, epochs, G_loss.item(), D_loss.item()))
-            if epoch % save_interval == 0:
-                save_image(fake, './SinGAN/result/{}_{}.png'.format(scale, epoch), normalize=True, value_range=(-1, 1))
+            status.update(g=G_loss.item(), d=D_loss.item())
 
         if scale+1 < len(epochses):
             G.progress(rec_fake, reals[scale])
@@ -179,48 +136,39 @@ def train(
         img = G.forward(sizes=test)
         save_image(img, './implementations/SinGAN/result/eval_{}x{}.png'.format(*test[-1]), normalize=True, value_range=(-1, 1))
 
-def add_arguments(parser):
-    parser.add_argument('--image-path', default='./data/animefacedataset/images/63568_2019.jpg', type=str, help='path to image')
-    parser.add_argument('--max-size', default=220, type=int, help='max size when training')
-    parser.add_argument('--min-size', default=25,  type=int, help='min size when training')
-    parser.add_argument('--scale-factor', default=0.7, type=float, help='scaling factor for resing the traning image')
-    parser.add_argument('--save-real', default=False, action='store_true', help='save real samples')
-    parser.add_argument('--img-channels', default=3, type=int, help='image channel size')
-    parser.add_argument('--channels', default=32, type=int, help='channels width multiplier')
-    parser.add_argument('--kernel-size', default=3, type=int, help='kernel size for convolution layers')
-    parser.add_argument('--norm-layer', default='bn', choices=['bn', 'in', 'sn'], help='normalization layer name')
-    parser.add_argument('--num-layers', default=5, type=int, help='number of layers for each scale G')
-    parser.add_argument('--disable-img-out', default=False, action='store_true', help='no tanh() on output of G')
-    parser.add_argument('--disable-bias', default=False, action='store_true', help='do not use bias')
-
-    parser.add_argument('--epochs', default=3000, type=int, help='epochs to train for each scale')
-    parser.add_argument('--increase', default=0, type=int, help='epochs to increase in each scale')
-    parser.add_argument('--G-step', default=3, type=int, help='number of steps for G before updating D')
-    parser.add_argument('--D-step', default=3, type=int, help='number of steps for D before updating G')
-    parser.add_argument('--lr', default=0.0005, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
-    parser.add_argument('--gp-type', default='one', choices=['one', 'zero'], help='center for gradient penalty')
-    parser.add_argument('--gp-lambda', default=0.1, type=float, help='lambda for gradient penalty')
-    parser.add_argument('--rec-alpha', default=10., type=float, help='alpha for reconstruction loss')
-    parser.add_argument('--test-size', default=500, type=int, help='size of test image')
-    return parser
-
 def main(parser):
 
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            image_path      = ['./data/animefacedataset/images/63568_2019.jpg', 'path to image'],
+            max_size        = [220, 'max size when training'],
+            min_size        = [25, 'min size when training'],
+            scale_factor    = [0.7, 'scale factor for resizing the training image'],
+            save_real       = [False, 'save real samples'],
+            img_channels    = [3, 'image channels'],
+            channels        = [32, 'channel width multiplier'],
+            kernel_size     = [3, 'kernel size of convolution layers'],
+            norm_layer      = ['bn', 'normalization layer name'],
+            num_layers      = [5, 'number of layers for each scale'],
+            disable_img_out = [False, 'disable Tanh on output'],
+            disable_bias    = [False, 'disable bias'],
+            epochs          = [3000, 'epochs to train each scale'],
+            increase        = [0, 'epochs to increase in each scale'],
+            G_step          = [3, 'number of G optimization steps'],
+            D_step          = [3, 'number of D optimization steps'],
+            lr              = [0.0005, 'learning rate'],
+            betas           = [[0.5, 0.999], 'betas'],
+            gp_type         = [0., 'center for gradient penalty'],
+            gp_lambda       = [0.1, 'lambda for gradient penalty'],
+            rec_alpha       = [10., 'alpha for reconstruction loss'],
+            test_size       = [500, 'size of test image']))
     args = parser.parse_args()
     save_args(args)
-    
+
     img_out = not args.disable_img_out
     bias = not args.disable_bias
-    betas = (args.beta1, args.beta2)
 
-
-    if not args.disable_gpu:
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device('cpu')
+    device = get_device(not args.disable_gpu)
 
     reals, sizes = load_real(
         args.image_path, device, args.max_size, args.min_size,
@@ -243,8 +191,8 @@ def main(parser):
         [args.epochs + scale*args.increase for scale, _ in enumerate(sizes)], args.G_step, args.D_step,
         Gs, Ds,
         reals, test,
-        args.lr, betas,
+        args.lr, args.betas,
         rec_criterion, args.gp_type,
         args.gp_lambda, args.rec_alpha,
-        1000, 1000
+        args.save
     )

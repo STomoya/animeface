@@ -9,9 +9,9 @@ import glob
 import random
 
 import torchvision.transforms.functional as TF
-from ...general.dataset_base import Dataset, pilImage
+from dataset._base import WrappedDataset, pilImage
 
-class _ImageGrayOTF(Dataset):
+class _ImageGrayOTF(WrappedDataset):
     '''
     dataset with rgb and gray paired image.
     gray images are generated on the fly
@@ -20,11 +20,10 @@ class _ImageGrayOTF(Dataset):
         self.image_size = image_size
         self.resize_ratio = resize_ratio
         self.images = self._load()
-        self.length = len(self.images)
-    
+
     def __len__(self):
         return len(self.images)
-    
+
     def __getitem__(self, index):
         image = self.images[index]
 
@@ -54,7 +53,7 @@ class Danbooru(_ImageGrayOTF):
         super().__init__(image_size, resize_ratio)
     def _load(self):
         images = glob.glob('/usr/src/data/danbooru/portraits/portraits/*')
-        if num_images is not None:
+        if self.num_images is not None:
             random.shuffle(images)
-            return images[:num_images]
+            return images[:self.num_images]
         return images

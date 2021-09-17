@@ -10,12 +10,12 @@ from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 import numpy as np
 
-from ..general import get_device, Status, save_args
-from ..gan_utils import sample_nnoise, update_ema
-from ..gan_utils.losses import LSGANLoss
+from utils import Status, save_args, add_args
+from nnutils import sample_nnoise, update_ema, get_device, init
+from nnutils.loss import LSGANLoss
 
 from .dataset import AnimeFace, DanbooruPortrait, Hair, Eye, Glass
-from .model import Generator, Discriminator, init_weight_xavier, init_weight_kaiming
+from .model import Generator, Discriminator, init_weight_xavier
 
 l1_loss = nn.L1Loss()
 
@@ -46,7 +46,7 @@ def train(
     recons_lambda, style_lambda, feat_lambda,
     amp, device, save
 ):
-    
+
     status = Status(max_iters)
     scaler = GradScaler() if amp else None
     loss = LSGANLoss()
@@ -57,7 +57,7 @@ def train(
             return output[0], output[1]
         else:
             return output, None
-    
+
     while status.batches_done < max_iters:
         i, j = random_ij(num_tags)
         _, j_ = random_ij(num_tags, (i, j))
@@ -154,11 +154,11 @@ def train(
             G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
             D=D_loss.item() if not torch.isnan(D_loss).any() else 0
         )
-        status.update(loss_dict)
+        status.update(**loss_dict)
         if scaler is not None:
             scaler.update()
-        
-    status.plot()
+
+    status.plot_loss()
 
 def _image_grid(real, fake, num_images=8):
     reals = real.chunk(real.size(0), dim=0)
@@ -170,48 +170,40 @@ def _image_grid(real, fake, num_images=8):
             break
     return torch.cat(images, dim=0)
 
-def add_arguments(parser):
-    parser.set_defaults(max_iters=500000)
-
-    # model
-    parser.add_argument('--style-dim', default=256, type=int, help='dimension for style code')
-    parser.add_argument('--latent-dim', default=128, type=int, help='input noise dimension')
-    parser.add_argument('--enc-num-downs', default=2, type=int, help='number of downsampling res-blocks in encoder/decoder')
-    parser.add_argument('--map-mid-dim', default=256, type=int, help='dimension of middle layers in mapper network')
-    parser.add_argument('--map-num-shared-layers', default=3, type=int, help='number of shared layers for all tags in a category')
-    parser.add_argument('--map-num-tag-layers', default=3, type=int, help='number of layers for each tags in a category')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--ex-bottom-width', default=8, type=int, help='minimum width before global avgpool in extractor network')
-    parser.add_argument('--trans-num-blocks', default=7, type=int, help='number of res-blocks in translator network')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--norm-name', default='in', choices=['in', 'bn'], help='name of normalization layer')
-    parser.add_argument('--act-name', default='lrelu', choices=['relu', 'lrelu'], help='name of activation function')
-    parser.add_argument('--no-bias', default=True, action='store_true', help='no bias')
-    # experimental
-    parser.add_argument('--normalize-latent', default=False, action='store_true', help='use pixel norm to input latent in mapper network')
-    parser.add_argument('--single-path', default=False, action='store_true', help='use only one branch for all tags')
-    parser.add_argument('--affine-each', default=False, action='store_true', help='affine input at each AdaIN layer')
-    parser.add_argument('--ret-feat', default=False, action='store_true', help='return features from D. for feature matching loss')
-
-    # data
-    parser.add_argument('--category', default=['hair', 'eye', 'glass'], nargs='+', type=str, help='categories')
-    parser.add_argument('--image-channels', default=3, type=int, help='channels of images')
-    
-    # training
-    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
-    parser.add_argument('--map-lr', default=0.000001, type=float, help='learning rate for mapper network')
-    parser.add_argument('--betas', default=[0., 0.99], type=float, nargs=2, help='betas')
-    parser.add_argument('--feat-lambda', default=10., type=float, help='lambda for feature matching loss')
-    parser.add_argument('--recons-lambda', default=1., type=float, help='lambda for reconstruction loss')
-    parser.add_argument('--style-lambda', default=1., type=float, help='lambda for style loss')
-    parser.add_argument('--ema-decay', default=0.999, type=float, help='decay for EMA')
-    return parser
-
 CATEGORY = {'hair': Hair, 'eye': Eye, 'glass': Glass}
 
 def main(parser):
-    
-    parser = add_arguments(parser)
+
+    # parser = add_arguments(parser)
+    parser.set_defaults(max_iters=500000)
+    add_args(parser,
+        dict(
+            style_dim             = [256, 'style code dimension'],
+            latent_dim            = [128, 'input latent dimension'],
+            enc_num_downs         = [2, 'number of downsampling res-blocks in encoder/decoder'],
+            map_mid_dim           = [256, 'dimension of middle layers in mapper network'],
+            map_num_shared_layers = [3, 'number of shared layers for all tags in a category'],
+            map_num_tag_layers    = [3, 'number of layers for each tags in a category'],
+            channels              = [32, 'channel width multiplier'],
+            ex_bottom_width       = [8, 'minimum width before global avgpool in extractor network'],
+            trans_num_blocks      = [7, 'number of res-blocks in translator network'],
+            num_layers            = [3, 'number of layers in D'],
+            norm_name             = ['in', 'normalization layer name'],
+            act_name              = ['lrelu', 'activation function name'],
+            no_bias               = [False, 'disable bias'],
+            normalize_latent      = [False, 'use pixel norm to input latent'],
+            single_path           = [False, 'use only one branch for all tags'],
+            affine_each           = [False, 'affine input at each AdaIN layer'],
+            ret_feat              = [False, 'return features from D'],
+            category              = [['hair', 'eye', 'glass'], 'categories'],
+            image_channels        = [3, 'image channels'],
+            lr                    = [0.0001, 'learning rate'],
+            map_lr                = [0.000001, 'learning rate for mapper network'],
+            betas                 = [[0., 0.99], 'betas'],
+            feat_lambda           = [10., 'lambda for feature matching loss'],
+            recons_lambda         = [1., 'lambda for reconstruction loss'],
+            style_lambda          = [1., 'lambda for style loss'],
+            ema_decay             = [0.999, 'decay for EMA']))
     args = parser.parse_args()
     save_args(args)
 
@@ -241,7 +233,7 @@ def main(parser):
     G = Generator(
         dataset.num_tags, args.image_size, args.image_channels,
         args.image_channels, args.style_dim, args.latent_dim,
-        args.enc_num_downs, 
+        args.enc_num_downs,
         args.map_mid_dim, args.map_num_shared_layers, args.map_num_tag_layers,
         args.channels, args.ex_bottom_width, args.trans_num_blocks,
         args.norm_name, args.act_name, not args.no_bias,
@@ -250,7 +242,7 @@ def main(parser):
     G_ema = Generator(
         dataset.num_tags, args.image_size, args.image_channels,
         args.image_channels, args.style_dim, args.latent_dim,
-        args.enc_num_downs, 
+        args.enc_num_downs,
         args.map_mid_dim, args.map_num_shared_layers, args.map_num_tag_layers,
         args.channels, args.ex_bottom_width, args.trans_num_blocks,
         args.norm_name, args.act_name, not args.no_bias,
@@ -266,9 +258,9 @@ def main(parser):
     G_ema.to(device)
     G_ema.eval()
     D.to(device)
-    G.apply(init_weight_xavier)
+    G.apply(init().xavier)
     update_ema(G, G_ema, 0)
-    D.apply(init_weight_xavier)
+    D.apply(init().xavier)
 
     # optimizers
     g_params = [

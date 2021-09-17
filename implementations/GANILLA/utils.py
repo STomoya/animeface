@@ -8,10 +8,10 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import random_split
 from torchvision.utils import save_image
 
-from ..general import AnimeFaceCelebADataset, DanbooruPortraitCelebADataset, to_loader
-from ..general import save_args, Status, get_device
-from ..gan_utils.losses import LSGANLoss
-from ..gan_utils import init
+from dataset import AnimeFaceCelebA, DanbooruPortraitCelebA, to_loader
+from utils import Status, save_args, add_args
+from nnutils import get_device, init
+from nnutils.loss import LSGANLoss
 
 from .model import Generator, Discriminator
 
@@ -23,7 +23,7 @@ def train(
     cycle_lambda,
     amp, device, save
 ):
-    
+
     status = Status(max_iters)
     loss   = LSGANLoss()
     scaler = GradScaler() if amp else None
@@ -53,7 +53,7 @@ def train(
                 adv_anime = loss.d_loss(real_anime, fake_anime)
                 adv_human = loss.d_loss(real_human, fake_human)
                 D_loss = adv_anime + adv_human
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -73,7 +73,7 @@ def train(
                 cycle_human = l1(HAH, human)
                 G_loss = adv_anime + adv_human \
                     + (cycle_anime + cycle_human) * cycle_lambda
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -103,13 +103,13 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
-            
+
             if status.batches_done == max_iters:
                 break
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(a, h, ah, ha):
     _split = lambda x: x.chunk(x.size(0), dim=0)
@@ -122,35 +122,30 @@ def _image_grid(a, h, ah, ha):
         images.extend([a, h, ha, ah])
     return torch.cat(images, dim=0)
 
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=6, type=int, help='number of images to use for test')
-
-    parser.add_argument('--image-channels', default=3, type=int, help='input/output image channels')
-    parser.add_argument('--bottom-width', default=8, type=int, help='bottom width')
-    parser.add_argument('--num-downs', default=None, type=int, help='number of down/up sampling')
-    parser.add_argument('--num-feats', default=3, type=int, help='number of features to return from the encoder')
-    parser.add_argument('--g-channels', default=32, type=int, help='channel width multiplier for G')
-    parser.add_argument('--hid-channels', default=128, type=int, help='channels in decoder')
-    parser.add_argument('--layer-num-blocks', default=2, type=int, help='number of blocks in one GANILLA layer')
-    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='disable spectral norm in G')
-    parser.add_argument('--g-bias', default=False, action='store_true', help='enable bias in G')
-    parser.add_argument('--g-norm-name', default='in', choices=['in', 'bn'], help='normalization name in G')
-    parser.add_argument('--g-act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function in G')
-
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--d-channels', default=32, type=int, help='channel width multiplier for D')
-    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='do not use spectral normalization in D')
-    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='do not use bias in D')
-    parser.add_argument('--d-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name in D')
-    parser.add_argument('--d-act-name', default='relu', choices=['relu', 'lrelu'], help='activation function in D')
-
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-    parser.add_argument('--cycle-lambda', default=10., type=float, help='lambda for cycle consistency loss')
-    return parser
-
 def main(parser):
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            num_test         = [6, 'number of images for eval'],
+            image_channels   = [3, 'image channels'],
+            bottom_width     = [8, 'bottom width'],
+            num_downs        = [int, 'number of up/down sampling'],
+            num_feats        = [3, 'number of features to return from the encoder'],
+            g_channels       = [32, 'channel_width multiplier'],
+            hid_channels     = [128, 'channels in decoder'],
+            layer_num_blocks = [2, 'number of blocks in one GANILLA layer'],
+            g_disable_sn     = [False, 'disable spectral norm'],
+            g_bias           = [False, 'enable bias'],
+            g_norm_name      = ['in', 'normalization layer name'],
+            g_act_name       = ['lrelu', 'activation function name'],
+            num_layers       = [3, 'number of layers'],
+            d_channels       = [32, 'channel width multiplier'],
+            d_disable_sn     = [False, 'disable spectral norm'],
+            d_disable_bias   = [False, 'disable bias'],
+            d_norm_name      = ['in', 'normalization layer name'],
+            d_act_name       = ['relu', 'activation function name'],
+            lr               = [0.0002, 'learning rate'],
+            betas            = [[0.5, 0.999], 'betas'],
+            cycle_lambda     = [10., 'lambda for cycle consistency loss']))
     args = parser.parse_args()
     save_args(args)
 
@@ -159,14 +154,14 @@ def main(parser):
 
     # dataset
     if args.dataset == 'animeface':
-        dataset = AnimeFaceCelebADataset(args.image_size, args.min_year)
+        dataset = AnimeFaceCelebA(args.image_size, args.min_year)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitCelebADataset(args.image_size, num_images=args.num_images+args.num_test)
+        dataset = DanbooruPortraitCelebA(args.image_size, num_images=args.num_images+args.num_test)
     dataset, test = random_split(dataset, [len(dataset)-args.num_test, args.num_test])
     # train
     dataset = to_loader(dataset, args.batch_size)
     # test
-    test = to_loader(test, args.num_test, shuffle=False, use_gpu=False)
+    test = to_loader(test, args.num_test, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 

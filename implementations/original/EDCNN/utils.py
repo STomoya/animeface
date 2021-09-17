@@ -1,6 +1,5 @@
 
 import functools
-from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
@@ -9,10 +8,11 @@ from torch.utils.data import random_split
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
-from ...general import to_loader
-from ...general import get_device, Status, save_args
-from ...gan_utils import DiffAugment
-from ...gan_utils.losses import LSGANLoss, VGGLoss
+from utils import Status, save_args, add_args
+from nnutils import get_device
+from nnutils.loss import LSGANLoss, VGGLoss
+from thirdparty.diffaugment import DiffAugment
+from dataset import to_loader
 
 from .dataset import AnimeFace, Danbooru
 from .model import Generator, Discriminator, init_weight_N002, init_weight_kaiming, init_weight_xavier
@@ -26,7 +26,7 @@ def train(
     color_augment,
     amp, device, save
 ):
-    
+
     status = Status(max_iters)
     loss   = LSGANLoss()
     vgg    = VGGLoss(device, p=1)
@@ -51,14 +51,14 @@ def train(
 
                 # loss
                 D_loss = loss.d_loss(real_prob, fake_prob)
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
             else:
                 D_loss.backward()
                 optimizer_D.step()
-            
+
             '''Generator'''
             with autocast(amp):
                 # D(G(gray, rgb))
@@ -73,7 +73,7 @@ def train(
                 if vgg_lambda > 0:
                     G_loss += vgg.vgg_loss(real, fake) * vgg_lambda
                 if content_lambda > 0:
-                    G_loss += vgg.content_loss(sketch.repeat(1, 3, 1, 1), fake) * vgg_lambda
+                    G_loss += vgg.content_loss(gray.repeat(1, 3, 1, 1), fake) * vgg_lambda
 
             if scaler is not None:
                 scaler.scale(G_loss).backward()
@@ -81,7 +81,7 @@ def train(
             else:
                 G_loss.backward()
                 optimizer_G.step()
-            
+
             # save
             if status.batches_done % save == 0:
                 with torch.no_grad():
@@ -100,14 +100,14 @@ def train(
                 G=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0,
                 D=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
 
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(src, ref, gen):
     _split = lambda x: x.chunk(x.size(0), dim=0)
@@ -120,40 +120,34 @@ def _image_grid(src, ref, gen):
         images.extend([src, ref, gen])
     return torch.cat(images, dim=0)
 
-def add_arguments(parser: ArgumentParser):
-    parser.add_argument('--num-test', default=6, type=int, help='number of samples in test set')
-
-    parser.add_argument('--gray-channels', default=1, type=int, help='number of channels for gray images')
-    parser.add_argument('--ref-channels', default=3, type=int, help='number of channels for reference images')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--style-dim', default=128, type=int, help='dimension of style code')
-    parser.add_argument('--se-blocks-per-resl', default=1, type=int, help='number of resblocks per resolution in style encoder')
-    parser.add_argument('--num-res-blocks', default=5, type=int, help='number of resblocks')
-    parser.add_argument('--disable-sobel', default=False, action='store_true', help='disable sobel conv2d')
-    parser.add_argument('--disable-learnable-sobel', default=False, action='store_true', help='disable learnable')
-    parser.add_argument('--e-conv-per-resl', default=2, type=int, help='number of convolution layers per resolution in encoder/decoder')
-    parser.add_argument('--disable-sn', default=False, type=int, help='disable spectral normalization')
-    parser.add_argument('--disable-bias', default=False, type=int, help='disable bias')
-    parser.add_argument('--norm-name', default='in', choices=['in', 'bn'], help='normalization layer name')
-    parser.add_argument('--act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function name')
-    parser.add_argument('--bottom-width', default=8, type=int, help='bottom width')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-
-    parser.add_argument('--init-func', default='N002', choices=['N002', 'xavier', 'kaiming'], help='initialization function')
-
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--ttur', default=False, action='store_true', help='use TTUR')
-    parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-    parser.add_argument('--recon-lambda', default=10, type=float, help='lambda for reconstruction loss')
-    parser.add_argument('--style-lambda', default=50, type=float, help='lambda for style loss')
-    parser.add_argument('--vgg-lambda', default=10, type=float, help='lambda for vgg loss')
-    parser.add_argument('--content-lambda', default=0, type=float, help='lambda for content loss')
-
-    return parser
-
 def main(parser):
-    
-    parser = add_arguments(parser)
+
+    parser = add_args(parser,
+        dict(
+            num_test                = [6, 'number of test samples'],
+            gray_channels           = [1, 'number of channels in gray images'],
+            ref_channels            = [3, 'number of channels in reference images'],
+            channels                = [32, 'channel width mutiplier'],
+            style_dim               = [128, 'dimension of style code'],
+            se_blocks_per_resl      = [1, 'resblocks per resolution in style encoder'],
+            num_res_blocks          = [5, 'number of resblocks'],
+            disable_sobel           = [False, 'disable sobel conv2d'],
+            disable_learnable_sobel = ['disable learnability'],
+            e_conv_per_resl         = [2, 'number of conv per resolution in en/decoder'],
+            disable_sn              = [False, 'disable spectral norm'],
+            disable_bias            = [False, 'disable bias'],
+            norm_name               = ['in', 'normalization layer name'],
+            act_name                = ['lrelu', 'activation function name'],
+            bottom_width            = [8, 'bottom width'],
+            num_layers              = [3, 'number of layer in D'],
+            init_func               = ['N002', 'one of "N002", "xavier", "kaiming"'],
+            lr                      = [0.0002, 'learning rate'],
+            betas                   = [[0.5, 0.999], 'betas'],
+            recon_lambda            = [10., 'lambda for reconstruction loss'],
+            style_lambda            = [50., 'lambda for style loss'],
+            vgg_lambda              = [10., 'lambda for vgg loss'],
+            content_lambda          = [0., 'lambda for content loss'],
+            ttur                    = [False, 'use TTUR']))
     args = parser.parse_args()
     args.name = args.name.replace('.', '/')
     save_args(args)
@@ -170,13 +164,13 @@ def main(parser):
     ## training dataset
     dataset = to_loader(dataset, args.batch_size)
     ## test batch
-    test    = to_loader(test, args.num_test, shuffle=False, use_gpu=False)
+    test    = to_loader(test, args.num_test, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 
     if args.max_iters < 0:
         args.max_iters = len(dataset) * args.default_epochs
-    
+
     # model
     G = Generator(
         args.image_size, args.gray_channels, args.ref_channels,

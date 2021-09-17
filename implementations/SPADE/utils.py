@@ -9,10 +9,10 @@ from torch.utils.data import random_split
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
-from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import get_device, Status, save_args
-from ..gan_utils import sample_nnoise, AdaBelief
-from ..gan_utils.losses import HingeLoss, GANLoss
+from dataset import AnimeFaceXDoG, DanbooruPortraitXDoG, to_loader
+from utils import Status, save_args, add_args
+from nnutils import get_device, sample_nnoise
+from nnutils.loss import HingeLoss
 
 from .model import Generator, Discriminator, Encoder, init_weight_xavier
 
@@ -65,7 +65,7 @@ def train(
                 D_loss = 0
                 for real_out, fake_out in zip(real_outs, fake_outs):
                     D_loss = D_loss + loss.d_loss(real_out[0], fake_out[0]) / d_num_scale
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -90,7 +90,7 @@ def train(
                 # KLD loss if E exists
                 if E is not None and kld_lambda > 0:
                     G_loss = G_loss + KL_divergence(mu, logvar) * kld_lambda
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -119,19 +119,19 @@ def train(
                 torch.save(G.state_dict(), f'implementations/SPADE/result/G_{status.batches_done}.pt')
                 if E is not None:
                     torch.save(E.state_dict(), f'implementations/SPADE/result/E_{status.batches_done}.pt')
-            
+
             # updates
             loss_dict = dict(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
-            
+
             if status.batches_done == max_iters:
                 break
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(line, gen, rgb, num_images=6):
     lines = line.repeat(1, 3, 1, 1).chunk(line.size(0), dim=0) # convert to RGB.
@@ -146,50 +146,40 @@ def _image_grid(line, gen, rgb, num_images=6):
 
     return torch.cat(images, dim=0)
 
-def add_argument(parser):
-    parser.add_argument('--line-channels', default=1, type=int, help='number of channels of line art images')
-    parser.add_argument('--rgb-channels', default=3, type=int, help='number of channels of the generated images')
-    parser.add_argument('--test-images', default=6, type=int, help='number of images for test')
-
-    # model
-    parser.add_argument('--z-dim', default=256, type=int, help='number of dimensions for input z')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--max-channels', default=1024, type=int, help='maximum number of channels')
-    # G
-    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers per residual block')
-    parser.add_argument('--spade-hidden-channels', default=128, type=int, help='number of channels in SPADE hidden layers')
-    parser.add_argument('--g-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of G')
-    parser.add_argument('--g-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of G')
-    parser.add_argument('--g-disable-bias', default=False, action='store_true', help='do not use bias in G')
-    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='do not use spectral normalization in G')
-    # D
-    parser.add_argument('--num-scale', default=2, type=int, help='number of scales to discriminate')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--d-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of D')
-    parser.add_argument('--d-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of D')
-    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='do not use bias in D')
-    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='do not use spectral normalization in D')
-    # E
-    parser.add_argument('--no-encoder', default=False, action='store_true', help='do not use encoder')
-    parser.add_argument('--target-resl', default=4, type=int, help='to what resolution down-sample to before FC layers in E')
-    parser.add_argument('--e-norm-name', default='bn', choices=['bn', 'in'], help='normalization layer name of E')
-    parser.add_argument('--e-act-name', default='lrelu', choices=['relu', 'lrelu'], help='activation function name of E')
-    parser.add_argument('--e-disable-bias', default=False, action='store_true', help='do not use bias in E')
-    parser.add_argument('--e-disable-sn', default=False, action='store_true', help='do not use spectral normalization in E')
-
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
-    parser.add_argument('--ttur', default=False, action='store_true', help='use TTUR')
-    parser.add_argument('--kld-lambda', default=0.05, type=float, help='lambda for KL divergence')
-    parser.add_argument('--feat-lambda', default=10., type=float, help='lambda for feature matching loss')
-
-    return parser
-
-
 def main(parser):
 
-    parser = add_argument(parser)
+    parser = add_args(parser,
+        dict(
+            line_channels         = [1, 'number of channels of line art images'],
+            rgb_channels          = [3, 'number of channels of the generated images'],
+            test_images           = [6, 'number of images for test'],
+            z_dim                 = [256, 'number of dimensions for input z'],
+            channels              = [32, 'channel width multiplier'],
+            max_channels          = [1024, 'maximum number of channels'],
+            block_num_conv        = [2, 'number of convolution layers per residual block'],
+            spade_hidden_channels = [128, 'number of channels in SPADE hidden layers'],
+            g_norm_name           = ['bn', 'normalization layer name of G'],
+            g_act_name            = ['lrelu', 'activation function name of G'],
+            g_disable_bias        = [False, 'do not use bias in G'],
+            g_disable_sn          = [False, 'do not use spectral normalization in G'],
+            num_scale             = [2, 'number of scales to discriminate'],
+            num_layers            = [3, 'number of layers in D'],
+            d_norm_name           = ['bn', 'normalization layer name of D'],
+            d_act_name            = ['lrelu', 'activation function name of D'],
+            d_disable_bias        = [False, 'do not use bias in D'],
+            d_disable_sn          = [False, 'do not use spectral normalization in D'],
+            no_encoder            = [False, 'do not use encoder'],
+            target_resl           = [4, 'to what resolution down-sample to before FC layers in E'],
+            e_norm_name           = ['bn', 'normalization layer name of E'],
+            e_act_name            = ['lrelu', 'activation function name of E'],
+            e_disable_bias        = [False, 'do not use bias in E'],
+            e_disable_sn          = [False, 'do not use spectral normalization in E'],
+            lr                    = [0.0002, 'learning rate'],
+            beta1                 = [0.5, 'beta1'],
+            beta2                 = [0.999, 'beta2'],
+            ttur                  = [False, 'use TTUR'],
+            kld_lambda            = [0.05, 'lambda for KL divergence'],
+            feat_lambda           = [10., 'lambda for feature matching loss']))
     args = parser.parse_args()
     save_args(args)
 
@@ -209,12 +199,12 @@ def main(parser):
 
     # dataset
     # dataset = XDoGAnimeFaceDataset(image_size, min_year)
-    dataset = XDoGDanbooruPortraitDataset(args.image_size, num_images=args.num_images+args.test_images)
+    dataset = DanbooruPortraitXDoG(args.image_size, num_images=args.num_images+args.test_images)
     dataset, test = random_split(dataset, [len(dataset)-args.test_images, args.test_images])
     ## training dataset
     dataset = to_loader(dataset, args.batch_size)
     ## test batch
-    test    = to_loader(test, args.test_images, shuffle=False, use_gpu=False)
+    test    = to_loader(test, args.test_images, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
     if args.max_iters < 0:
@@ -250,7 +240,7 @@ def main(parser):
     else:
         E = None
         args.kld_lambda = 0
-    
+
     # optimizers
     if args.ttur:
         g_lr, d_lr = args.lr / 2, args.lr * 2

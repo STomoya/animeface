@@ -3,23 +3,21 @@ import os
 import functools
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
 from ..StyleGAN2.model import Generator, Discriminator, init_weight_N01
-from ..general.dataset_base import Image, make_default_transform
-from ..general import to_loader
-from ..general import get_device, Status, save_args
-from ..gan_utils import sample_nnoise, AdaBelief, update_ema, DiffAugment
-from ..gan_utils.losses import GANLoss, GradPenalty
 
+from dataset._base import Image, make_default_transform, pilImage
+from utils import Status, save_args, add_args
+from nnutils import get_device, update_ema, sample_nnoise
+from nnutils.loss import NonSaturatingLoss, r1_regularizer
+from thirdparty.diffaugment import DiffAugment
 
 '''dataset classes with Image + Blur'''
 import glob
 import random
-from PIL import Image as pilImage
 class ImageBlur(Image):
     def __init__(self, image_size, resize_ratio=1.):
         transform = make_default_transform(image_size, resize_ratio)
@@ -39,58 +37,51 @@ class ImageBlur(Image):
         return image, blur
     def shuffle_blur(self):
         random.shuffle(self.blurs)
-    
+
+_year_from_path = lambda path: int(os.path.splitext(os.path.basename(path))[0].split('_')[-1])
+
+
 class AnimeFaceBlur(ImageBlur):
     def __init__(self, image_size, min_year=2005, resize_ratio=1.):
+        self.min_year = min_year
         super().__init__(image_size, resize_ratio)
-        self.images = [path for path in self.images if self._year_from_path(path) >= min_year]
-        self.blurs = self._load_blur()
-        self.length = len(self.images)
     def _load(self):
-        return glob.glob('/usr/src/data/animefacedataset/images/*')
+        images = glob.glob('/usr/src/data/animefacedataset/images/*')
+        if self.min_year != None:
+            images = [path for path in images if _year_from_path(path) >= self.min_year]
+        return images
     def _load_blur(self):
         blurs = [path.replace('images', 'blur') for path in self.images]
         random.shuffle(blurs)
         return blurs
-    def _year_from_path(self, path):
-        name, _ = os.path.splitext(os.path.basename(path))
-        year = int(name.split('_')[-1])
-        return year
 
 class DanbooruPortraitBlur(ImageBlur):
     def __init__(self, image_size, num_images=None, resize_ratio=1.2):
+        self.num_images = num_images
         super().__init__(image_size, resize_ratio)
-        if num_images:
-            random.shuffle(self.images)
-            self.images = self.images[:num_images]
-            self.length = len(self.images)
-            self.blurs  = self._load_blur()
     def _load(self):
-        return glob.glob('/usr/src/data/danbooru/portraits/portraits/*')
+        images = glob.glob('/usr/src/data/danbooru/2020/*/*.jpg', recursive=True)
+        if self.num_images is not None:
+            random.shuffle(images)
+            images = images[:self.num_images]
+        return images
     def _load_blur(self):
         blurs = [path.replace('portraits/portraits', 'portraits/blur') for path in self.images]
         random.shuffle(blurs)
         return blurs
 
-softplus = nn.Softplus()
-def edge_adv_loss(edge_prob):
-    # train blured edge images as fake
-    edge_loss = softplus(edge_prob).mean()
-    return edge_loss
-
 def train(
-    max_iter, dataset, sampler, const_z,
+    max_iter, dataset, sampler, const_z, style_dim,
     G, G_ema, D, optimizer_G, optimizer_D,
     r1_lambda, d_k, policy,
     edge_loss_from,
     device, amp,
     save=1000
 ):
-    
+
     status  = Status(max_iter)
-    pl_mean = 0.
-    loss    = GANLoss()
-    gp      = GradPenalty()
+    loss    = NonSaturatingLoss()
+    gp      = r1_regularizer()
     scaler  = GradScaler() if amp else None
     augment = functools.partial(DiffAugment, policy=policy)
 
@@ -107,7 +98,7 @@ def train(
             blur = blur.to(device)
 
             '''discriminator'''
-            z = sampler()
+            z = sampler((real.size(0), style_dim))
             with autocast(amp):
                 # D(real)
                 real_aug = augment(real)
@@ -122,17 +113,17 @@ def train(
                 # loss
                 if status.batches_done % d_k == 0 \
                     and r1_lambda > 0 \
-                    and status.batches_done is not 0:
+                    and status.batches_done != 0:
                     # lazy regularization
-                    r1 = gp.r1_regularizer(real, D, scaler)
+                    r1 = gp(real, D, scaler)
                     D_loss = r1 * r1_lambda * d_k
                 else:
                     # gan loss on other iter
                     D_loss = loss.d_loss(real_prob, fake_prob)
                     # add gan loss for blured edges
                     if edge_loss_from > status.batches_done:
-                        D_loss = D_loss + edge_adv_loss(blur_prob)
-            
+                        D_loss = D_loss + loss.fake_loss(blur_prob)
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -146,7 +137,7 @@ def train(
                 fake_prob = D(fake_aug)
                 # loss
                 G_loss = loss.g_loss(fake_prob)
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -161,8 +152,12 @@ def train(
             if status.batches_done % save == 0:
                 with torch.no_grad():
                     images, _ = G_ema(const_z)
-                save_image(images, f'implementations/edge/result/{status.batches_done}.jpg', nrow=4, normalize=True, value_range=(-1, 1))
-                torch.save(G_ema.state_dict(), f'implementations/edge/result/G_{status.batches_done}.pt')
+                save_image(
+                    images, f'implementations/edge/result/{status.batches_done}.jpg',
+                    nrow=4, normalize=True, value_range=(-1, 1))
+                torch.save(
+                    G_ema.state_dict(),
+                    f'implementations/edge/result/G_{status.batches_done}.pt')
             save_image(fake, f'running.jpg', nrow=4, normalize=True, value_range=(-1, 1))
 
             # updates
@@ -170,65 +165,58 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iter:
                 break
         dataset.dataset.shuffle_blur()
-    
+
     status.plot()
-
-def add_argument(parser):
-    # args for StyleGAN2
-    # model
-    parser.add_argument('--image-channels', default=3, type=int, help='number of channels for the generated image')
-    parser.add_argument('--style-dim', default=512, type=int, help='style feature dimension')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--max-channels', default=512, type=int, help='maximum channels')
-    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers in residual block')
-    parser.add_argument('--map-num-layers', default=8, type=int, help='number of layers in mapping network')
-    parser.add_argument('--map-lr', default=0.01, type=float, help='learning rate for mapping network')
-    parser.add_argument('--disable-map-norm', default=False, action='store_true', help='disable pixel normalization in mapping network')
-    parser.add_argument('--mbsd-groups', default=4, type=int, help='number of groups in mini-batch standard deviation')
-    # training
-    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0., type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.99, type=float, help='beta2')
-    # parser.add_argument('--g-k', default=8, type=int, help='for lazy regularization. calculate perceptual path length loss every g_k iters')
-    parser.add_argument('--d-k', default=16, type=int, help='for lazy regularization. calculate gradient penalty each d_k iters')
-    parser.add_argument('--r1-lambda', default=10, type=float, help='lambda for r1')
-    # parser.add_argument('--pl-lambda', default=0., type=float, help='lambda for perceptual path length loss')
-    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
-
-    # args for edge
-    parser.add_argument('--wait-edge-epoch', default=0, type=int, help='epochs to wait before adding edge adv loss')
-    return parser
 
 def main(parser):
 
-    parser = add_argument(parser)
+    parser = add_args(parser,
+        dict(
+            image_channels=[3, 'number of channels for generated images'],
+            style_dim=[512, 'style code dimension'],
+            channels=[32, 'channel width multiplier'],
+            max_channels=[512, 'maximum channels width'],
+            block_num_conv=[2, 'number of conv in residual'],
+            map_num_layers=[8, 'number of layers mapping network'],
+            map_lr=[0.01, 'learning rate for mapping network'],
+            disable_map_norm=[False, 'disable pixel norm'],
+            mbsd_groups=[4, 'mini batch stddev groups'],
+            lr=[0.001, 'learning rate'],
+            betas=[[0., 0.99], 'betas'],
+            d_k=[16, 'calc gp every'],
+            r1_lambda=[10., 'lambda for gp'],
+            policy=['color,translation', 'policy for DiffAugment'],
+            wait_edge_epoch=[0, 'epochs to wait before adding edge adv loss']
+        )
+    )
     args = parser.parse_args()
     save_args(args)
 
     normalize = not args.disable_map_norm
-    betas = (args.beta1, args.beta2)
+    betas = args.betas
 
     amp = not args.disable_amp
     device = get_device(not args.disable_gpu)
 
     # dataset
     if args.dataset == 'animeface':
-        dataset = AnimeFaceBlur(args.image_size, args.min_year)
+        dataset = AnimeFaceBlur.asloader(
+            args.batch_size, (args.image_size, args.min_year),
+            pin_memory=not args.disable_gpu)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitBlur(args.image_size, args.num_images)
-    dataset = to_loader(
-                dataset, args.batch_size, shuffle=True,
-                num_workers=os.cpu_count(), use_gpu=torch.cuda.is_available())
+        dataset = DanbooruPortraitBlur.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
 
     # random noise sampler
-    sampler = functools.partial(sample_nnoise, (args.batch_size, args.style_dim), device=device)
+    sampler = functools.partial(sample_nnoise, device=device)
     # const input for eval
     const_z = sample_nnoise((16, args.style_dim), device=device)
 
@@ -240,7 +228,7 @@ def main(parser):
             args.image_size, args.image_channels, args.style_dim, args.channels, args.max_channels,
             args.block_num_conv, args.map_num_layers, normalize, args.map_lr)
     D = Discriminator(
-            args.image_size, args.image_channels, args.channels, args.max_channels, 
+            args.image_size, args.image_channels, args.channels, args.max_channels,
             args.block_num_conv, args.mbsd_groups)
     ## init
     G.init_weight(
@@ -262,7 +250,7 @@ def main(parser):
         d_lr = args.lr * d_ratio
         d_betas = (betas[0]**d_ratio, betas[1]**d_ratio)
     else: d_lr, d_betas = args.lr, betas
-    
+
     optimizer_G = optim.Adam(G.parameters(), lr=g_lr, betas=g_betas)
     optimizer_D = optim.Adam(D.parameters(), lr=d_lr, betas=d_betas)
 
@@ -271,9 +259,8 @@ def main(parser):
     edge_loss_from = len(dataset) * args.wait_edge_epoch
 
     train(
-        args.max_iters, dataset, sampler, const_z,
+        args.max_iters, dataset, sampler, const_z, args.style_dim,
         G, G_ema, D, optimizer_G, optimizer_D,
         args.r1_lambda, args.d_k,
         args.policy, edge_loss_from, device, amp, 1000
     )
-    

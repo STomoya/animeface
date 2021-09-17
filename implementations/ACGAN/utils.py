@@ -3,147 +3,126 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision.utils import save_image
-import numpy as np
 
-from .model import Generator, Discriminator, weights_init_normal
-from ..general import LabeledAnimeFaceDataset, to_loader
+from .model import Generator, Discriminator
+
+from dataset import AnimeFaceLabel
+from utils import add_args, save_args, Status
+from nnutils import get_device, sample_nnoise, init
+from nnutils.loss import LSGANLoss
 
 def train(
-    epochs,
-    dataset,
-    label_type,
-    latent_dim,
-    G,
-    optimizer_G,
-    D,
-    optimizer_D,
-    validity_criterion,
+    max_iters, dataset, latent_dim, num_class,
+    G, optimizer_G,
+    D, optimizer_D,
     label_criterion,
-    device,
-    verbose_interval,
-    save_interval
+    device, save_interval
 ):
-    
-    for epoch in range(epochs):
+
+    status = Status(max_iters)
+    loss = LSGANLoss()
+
+    while status.batches_done < max_iters:
         for index, (image, label) in enumerate(dataset, 1):
-            # label smoothing
-            gt   = torch.from_numpy((1.0 - 0.7) * np.random.randn(image.size(0), 1) + 0.7)
-            gt   = gt.type(torch.FloatTensor).to(device)
-            fake = torch.from_numpy((0.3 - 0.0) * np.random.randn(image.size(0), 1) + 0.0)
-            fake = fake.type(torch.FloatTensor).to(device)
+            # real label
+            real_label = label.to(device)
+            # fake label
+            fake_label = torch.randint(0, num_class, (image.size(0), )).to(device)
 
-            # class label
-            index_label = label[label_type].max(1)[1].view(image.size(0))
-            index_label = index_label.type(torch.LongTensor).to(device)
-            # generate class label
-            gen_label = torch.from_numpy(np.random.randint(0, 28, (image.size(0), )))
-            gen_label = gen_label.type(torch.LongTensor).to(device)
-
-            # real image
-            image = image.to(device)
-
-            # noise
-            noise = torch.from_numpy(np.random.normal(0, 1, (image.size(0), latent_dim)))
-            noise = noise.type(torch.FloatTensor).to(device)
-
-
+            real = image.to(device)
+            z = sample_nnoise((image.size(0), latent_dim), device)
 
             # generate image
-            fake_image = G(noise, gen_label)
-
+            fake= G(z, fake_label)
 
             '''
             Train Discriminator
             '''
 
-            # detect real
-            validity, label_prob = D(image)
-            real_validity_loss = validity_criterion(validity.view(gt.size(0), 1), gt)
-            real_label_loss = label_criterion(label_prob, index_label)
-            # detect fake
-            validity, label_prob = D(fake_image.detach())
-            fake_validity_loss = validity_criterion(validity.view(fake.size(0), 1), fake)
-            fake_label_loss = label_criterion(label_prob, gen_label)
+            # D(real)
+            real_prob, label_prob = D(real)
+            # D(G(z))
+            fake_prob, label_prob = D(fake.detach())
+
+            # loss
+            real_label_loss = label_criterion(label_prob, real_label)
+            fake_label_loss = label_criterion(label_prob, fake_label)
+            label_loss = (real_label_loss + fake_label_loss) / 2
+            adv_loss = loss.d_loss(real_prob, fake_prob)
             # total loss
-            d_validity_loss = (real_validity_loss + fake_validity_loss) / 2
-            d_label_loss = (fake_validity_loss + fake_label_loss) / 2
-            d_loss = (d_validity_loss + d_label_loss) / 2
+            D_loss = adv_loss + label_loss
 
             # optimize
             optimizer_D.zero_grad()
-            d_loss.backward()
+            D_loss.backward()
             optimizer_D.step()
-
 
             '''
             Train Generator
             '''
 
-
             # train to fool D
-            validity, label_prob = D(fake_image)
-            g_validity_loss = validity_criterion(validity.view(gt.size(0), 1), gt)
-            g_label_loss = label_criterion(label_prob, gen_label)
-            g_loss = (g_validity_loss + g_label_loss) / 2
+            fake_prob, label_prob = D(fake)
+            fake_label_loss = label_criterion(label_prob, fake_label)
+            adv_loss = loss.g_loss(fake_prob)
+            G_loss = adv_loss + fake_label_loss
 
             # optimize
             optimizer_G.zero_grad()
-            g_loss.backward()
+            G_loss.backward()
             optimizer_G.step()
 
 
+            if status.batches_done % save_interval == 0:
+                save_image(
+                    fake, f'implementations/ACGAN/result/{status.batches_done}.png',
+                    normalize=True, value_range=(-1, 1))
+                torch.save(G.state_dict(), f'implementations/ACGAN/result/G_{status.batches_done}.pt')
 
+            # updates
+            loss_dict = dict(
+                g=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0,
+                d=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0,)
+            status.update(**loss_dict)
 
-            batches_done = epoch * len(dataset) + index
+            if status.batches_done == max_iters:
+                break
 
-            if batches_done % verbose_interval == 0:
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch, epochs, index, len(dataset), d_loss.item(), g_loss.item())
-                )
-            
-            fake_image.view(fake_image.size(0), -1)
-            if batches_done % save_interval == 0:
-                save_image(fake_image.data[:25], "implementations/ACGAN/result/%d.png" % batches_done, nrow=5, normalize=True)
+    status.plot_loss()
 
 def main(parser):
-    batch_size = 32
-    epochs = 150
-    latent_dim = 200
-    label_type, label_dim = 'i2v', 28
-    # label_type, label_dim = 'year', 20
+    parser = add_args(parser,
+        dict(latent_dim=[200]))
+    args = parser.parse_args()
+    save_args(args)
 
-    dataset = LabeledAnimeFaceDataset(128)
-    dataset = to_loader(dataset, batch_size)
+    device = get_device(not args.disable_gpu)
 
-    G = Generator(latent_dim=latent_dim, label_dim=label_dim)
-    D = Discriminator(label_dim=label_dim)
+    dataset = AnimeFaceLabel.asloader(
+        args.batch_size, (args.image_size, ),
+        pin_memory=not args.disable_gpu)
 
-    G.apply(weights_init_normal)
-    D.apply(weights_init_normal)
+    G = Generator(latent_dim=args.latent_dim, label_dim=dataset.dataset.num_classes)
+    D = Discriminator(label_dim=dataset.dataset.num_classes)
 
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    G.apply(init().N002)
+    D.apply(init().N002)
+
     G.to(device)
     D.to(device)
 
     optimizer_G = optim.Adam(G.parameters())
     optimizer_D = optim.Adam(D.parameters())
 
-    validity_criterion = nn.MSELoss()
     label_criterion = nn.CrossEntropyLoss()
 
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
+
     train(
-        epochs=epochs,
-        dataset=dataset,
-        label_type=label_type,
-        latent_dim=latent_dim,
-        G=G,
-        optimizer_G=optimizer_G,
-        D=D,
-        optimizer_D=optimizer_D,
-        validity_criterion=validity_criterion,
-        label_criterion=label_criterion,
-        device=device,
-        verbose_interval=100,
-        save_interval=500
+        args.max_iters, dataset, args.latent_dim,
+        dataset.dataset.num_classes,
+        G, optimizer_G, D, optimizer_D,
+        label_criterion,
+        device, args.save
     )

@@ -8,10 +8,11 @@ import torch.nn.functional as F
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
 
-from ..general import YearAnimeFaceDataset, DanbooruPortraitDataset, to_loader
-from ..gan_utils import sample_nnoise, DiffAugment, update_ema
-from ..general import get_device, Status, save_args
-from ..gan_utils.losses import GANLoss, GradPenalty
+from dataset import AnimeFace, DanbooruPortrait
+from utils import Status, add_args, save_args
+from nnutils import get_device, sample_nnoise, update_ema
+from nnutils.loss import NonSaturatingLoss, r1_regularizer
+from thirdparty.diffaugment import DiffAugment
 
 from .model import Generator, Discriminator, init_weight_N01
 
@@ -24,8 +25,8 @@ def train(
 ):
 
     status = Status(max_iters)
-    loss   = GANLoss()
-    gp     = GradPenalty()
+    loss   = NonSaturatingLoss()
+    gp     = r1_regularizer()
     scaler = GradScaler() if amp else None
 
     while status.batches_done < max_iters:
@@ -58,7 +59,7 @@ def train(
                 D_loss = loss.d_loss(real_prob, fake_prob)
                 if gp_lambda > 0 and status.batches_done % d_k == 0:
                     D_loss = D_loss \
-                        + gp.r1_regularizer(real, D, scaler) * gp_lambda
+                        + gp(real, D, scaler) * gp_lambda
 
             if scaler is not None:
                 scaler.scale(D_loss).backward()
@@ -99,14 +100,14 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
 
-    status.plot()
+    status.plot_loss()
 
 def chose_scale(scales, scale_probs):
     assert len(scales) == len(scale_probs)
@@ -117,45 +118,39 @@ def chose_scale(scales, scale_probs):
         r -= prob
     return scales[i]
 
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=16, type=int)
-    # G
-    parser.add_argument('--g-bottom', default=4, type=int)
-    parser.add_argument('--no-spe', default=False, action='store_true')
-    parser.add_argument('--latent-dim', default=512, type=int)
-    parser.add_argument('--in-channels', default=512, type=int)
-    parser.add_argument('--style-dim', default=512, type=int)
-    parser.add_argument('--out-channels', default=3, type=int)
-    parser.add_argument('--g-channels', default=32, type=int)
-    parser.add_argument('--g-max-channels', default=512, type=int)
-    parser.add_argument('--pad', default=False, action='store_true')
-    parser.add_argument('--map-num-layers', default=8, type=int)
-    parser.add_argument('--no-pixelnorm', default=False, action='store_true')
-    parser.add_argument('--filter-size', default=4, type=int)
-    parser.add_argument('--g-act-name', default='lrelu')
-    # D
-    parser.add_argument('--d-bottom', default=2, type=int)
-    parser.add_argument('--d-channels', default=32, type=int)
-    parser.add_argument('--d-max-channels', default=512, type=int)
-    parser.add_argument('--mbsd-groups', default=4, type=int)
-    parser.add_argument('--no-gap', default=False, action='store_true')
-    parser.add_argument('--d-act-name', default='lrelu')
-
-    # training
-    parser.add_argument('--map-lr', default=0.01, type=float)
-    parser.add_argument('--lr', default=0.001, type=float)
-    parser.add_argument('--betas', default=[0., 0.99], type=float, nargs=2)
-    parser.add_argument('--gp-lambda', default=5., type=float)
-    parser.add_argument('--d-k', default=16, type=int)
-    parser.add_argument('--scales', default=[1., 1.5, 2.])
-    parser.add_argument('--scale-probs', default=[1/3, 1/3, 1/3])
-    parser.add_argument('--mix-prob', default=0.5, type=float)
-    parser.add_argument('--policy', default='color,translation')
-    return parser
-
 def main(parser):
 
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            num_test       = [16, 'number of test images'],
+            no_spe         = [False, 'no position encoding'],
+            g_bottom       = [4, 'bottom width'],
+            latent_dim     = [512, 'input latent dim'],
+            in_channels    = [512, 'synthesis input channels'],
+            style_dim      = [512, 'style code dimension'],
+            out_channels   = [3, 'output image channels'],
+            g_channels     = [32, 'channel_width multiplier'],
+            g_max_channels = [512, 'maximum channel width'],
+            pad            = [False, 'use zero padding'],
+            map_num_layers = [8, 'number of layers in mapping network'],
+            no_pixelnorm   = [False, 'disable pixel norm'],
+            filter_size    = [4, 'size of binomial filter'],
+            g_act_name     = ['lrelu', 'activation function name'],
+            d_bottom       = [2, 'discriminator bottom before GAP'],
+            d_channels     = [32, 'channel width multiplier'],
+            d_max_channels = [512, 'maximum channel width'],
+            mbsd_groups    = [4, 'mini batch stddev groups'],
+            no_gap         = [False, 'no gap layer'],
+            d_act_name     = ['lrelu', 'activation function name'],
+            map_lr         = [0.01, 'mappinf layer learning rate'],
+            lr             = [0.001, 'learning rate'],
+            betas          = [[0., 0.99], 'betas'],
+            gp_lambda      = [5., 'lambda for r1'],
+            d_k            = [16, 'calc r1 every'],
+            scales         = [[1., 1.5, 2.], 'image scales'],
+            scale_probs    = [[1/3, 1/3, 1/3], 'image scale probability'],
+            mix_prob       = [0.9, 'style mixing probability'],
+            policy         = ['color,translation']))
     args = parser.parse_args()
     save_args(args)
 
@@ -164,10 +159,13 @@ def main(parser):
 
     # data
     if args.dataset == 'animeface':
-        dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
+        dataset = AnimeFace.asloader(
+            args.batch_size, (args.image_size, args.min_year),
+            pin_memory=not args.disable_gpu)
     elif args.dataset == 'danbooru':
-        dataset = DanbooruPortraitDataset(args.image_size, num_images=args.num_images)
-    dataset = to_loader(dataset, args.batch_size)
+        dataset = DanbooruPortrait.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
 
     sampler = functools.partial(sample_nnoise, device=device)
     const_z = sampler((args.num_test, args.latent_dim))

@@ -5,6 +5,8 @@ services:
         build:
             context: .
             dockerfile: docker/torch/Dockerfile
+            args:
+                - UID=${UID}
         runtime: nvidia
         environment:
             - NVIDIA_VISIBLE_DEVICES=all

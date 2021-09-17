@@ -8,10 +8,10 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import random_split
 from torchvision.utils import save_image
 
-from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import get_device, Status, save_args
-from ..gan_utils import AdaBelief
-from ..gan_utils.losses import LSGANLoss, HingeLoss
+from dataset import AnimeFaceXDoG, DanbooruPortraitXDoG, to_loader
+from utils import Status, add_args, save_args
+from nnutils import get_device
+from nnutils.loss import LSGANLoss
 
 from .model import Generator, Discriminator, init_weight_normal
 
@@ -28,7 +28,7 @@ def train(
     cycle_lambda, test,
     device, amp, save=1000
 ):
-    
+
     status = Status(max_iter)
     loss = LSGANLoss()
     scaler = GradScaler() if amp else None
@@ -56,7 +56,7 @@ def train(
                 adv_loss_line = loss.d_loss(real_line_prob, fake_line_prob)
                 adv_loss_rgb  = loss.d_loss(real_rgb_prob, fake_rgb_prob)
                 D_loss = adv_loss_line + adv_loss_rgb
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -79,7 +79,7 @@ def train(
                 consistency_loss_rgb  = consistency(rgb2line2rgb, rgb)
                 G_loss = adv_loss_line + adv_loss_rgb \
                          + (consistency_loss_line + consistency_loss_rgb) * cycle_lambda
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -90,16 +90,22 @@ def train(
             # save
             if status.batches_done % save == 0:
                 image_grid = _image_grid(line, line2rgb)
-                save_image(image_grid, f'implementations/CycleGAN/result/recons_{status.batches_done}.jpg', nrow=3*2, normalize=True, value_range=(-1, 1))
+                save_image(
+                    image_grid, f'implementations/CycleGAN/result/recons_{status.batches_done}.jpg',
+                    nrow=3*2, normalize=True, value_range=(-1, 1))
                 # eval
                 GC.eval()
                 with torch.no_grad():
                     line2rgb = GC(test[1])
                 GC.train()
                 image_grid = _image_grid(test[1], line2rgb)
-                save_image(image_grid, f'implementations/CycleGAN/result/test_{status.batches_done}.jpg', nrow=3*2, normalize=True, value_range=(-1, 1))
+                save_image(
+                    image_grid, f'implementations/CycleGAN/result/test_{status.batches_done}.jpg',
+                    nrow=3*2, normalize=True, value_range=(-1, 1))
                 # model
-                torch.save(GC.state_dict(), f'implementations/CycleGAN/result/colorize_{status.batches_done}.pt')
+                torch.save(
+                    GC.state_dict(),
+                    f'implementations/CycleGAN/result/colorize_{status.batches_done}.pt')
                 # torch.save(GL.state_dict(), f'implementations/CycleGAN/result/sketch_{status.batches_done}.pt')
             save_image(line2rgb, 'running_color.jpg', normalize=True, value_range=(-1, 1))
 
@@ -108,17 +114,17 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
-            
+
             if status.batches_done == max_iter:
                 break
         if status.batches_done > decay_from:
             update_lr(optimizer_D, delta)
             update_lr(optimizer_G, delta)
 
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(line, gen, num_images=6):
     lines = line.repeat(1, 3, 1, 1).chunk(line.size(0), dim=0) # convert to RGB.
@@ -132,37 +138,34 @@ def _image_grid(line, gen, num_images=6):
 
     return torch.cat(images, dim=0)
 
-def add_arguments(parser):
-    parser.add_argument('--line-channels', default=1, type=int, help='number of channels of line art images')
-    parser.add_argument('--rgb-channels', default=3, type=int, help='number of channels of the generated images')
-    parser.add_argument('--test-images', default=6, type=int, help='numbers of images for test')
-
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--max-channels', default=1024, type=int, help='maximum number of channels')
-    parser.add_argument('--downsample-to', default=32, type=int, help='the resolution to downsample to in G')
-    parser.add_argument('--num-blocks', default=6, type=int, help='number of residual blocks in G')
-    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers per block')
-    parser.add_argument('--g-disable-sn', default=False, action='store_true', help='do not use spectral normalization in G')
-    parser.add_argument('--g-disable-bias', default=False, action='store_true', help='do not use bias in G')
-    parser.add_argument('--g-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name in G')
-    parser.add_argument('--g-act-name', default='relu', choices=['relu', 'lrelu'], help='activation function in G')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--d-disable-sn', default=False, action='store_true', help='do not use spectral normalization in D')
-    parser.add_argument('--d-disable-bias', default=False, action='store_true', help='do not use bias in D')
-    parser.add_argument('--d-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name in D')
-    parser.add_argument('--d-act-name', default='relu', choices=['relu', 'lrelu'], help='activation function in D')
-
-    parser.add_argument('--epochs', default=100, type=int, help='epochs to train with constant learning rate')
-    parser.add_argument('--decay-epochs', default=100, type=int, help='epochs to train with a linearly decaying learning rate')
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
-    parser.add_argument('--cycle-lambda', default=10., type=float, help='lambda for cycle consistency loss')
-    return parser
 
 def main(parser):
-    
-    parser = add_arguments(parser)
+
+    parser = add_args(parser,
+        dict(
+            line_channels  = [1, 'number of channels of line art images'],
+            rgb_channels   = [3, 'number of channels of the generated images'],
+            test_images    = [6, 'number of images for test'],
+            channels       = [32, 'channel width multiplier'],
+            max_channels   = [1024, 'maximum channels width'],
+            downsample_to  = [32, 'bottom width'],
+            num_blocks     = [6, 'number of residual blocks'],
+            block_num_conv = [2, 'number of conv in resblock'],
+            g_disable_sn   = [False, 'disable spectral norm'],
+            g_disable_bias = [False, 'disable bias'],
+            g_norm_name    = ['in', 'normalization layer name'],
+            g_act_name     = ['relu', 'activation function name'],
+            num_layers     = [3, 'number of layers in PatchGAN D'],
+            d_disable_sn   = [False, 'disable spectral norm'],
+            d_disable_bias = [False, 'disable bias'],
+            d_norm_name    = ['in', 'normalization layer name'],
+            d_act_name     = ['relu', 'activation function name'],
+            epochs         = [100, 'epochs to train with const lr'],
+            decay_epochs   = [1000, 'epochs to train with linearly decaying lr'],
+            lr             = [0.0002, 'learning rate'],
+            betas          = [[0.5, 0.999], 'betas'],
+            cycle_lambda   = [10., 'lambda for cycle consistency loss'])
+    )
     args = parser.parse_args()
     save_args(args)
 
@@ -172,19 +175,21 @@ def main(parser):
     # discriminator
     d_use_sn   = not args.d_disable_sn
     d_use_bias = not args.d_disable_bias
-    
+
     amp = not args.disable_amp
     device = get_device(not args.disable_gpu)
 
     # dataset
     # train
-    dataset = XDoGAnimeFaceDataset(args.image_size, args.min_year)
-    dataset = XDoGDanbooruPortraitDataset(args.image_size, num_images=args.num_images+args.test_images)
+    if args.dataset == 'animeface':
+        dataset = AnimeFaceXDoG(args.image_size, args.min_year)
+    elif args.dataset == 'danbooru':
+        dataset = DanbooruPortraitXDoG(args.image_size, args.num_images+args.test_images)
     dataset, test = random_split(dataset, [len(dataset)-args.test_images, args.test_images])
     dataset.dataset.shuffle_xdog()
     dataset = to_loader(dataset, args.batch_size)
     # test
-    test = to_loader(test, args.test_images, shuffle=False, use_gpu=False)
+    test = to_loader(test, args.test_images, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 
@@ -227,14 +232,13 @@ def main(parser):
     DL.to(device)
 
     # optimizers
-    betas = (args.beta1, args.beta2)
-    optimizer_G = AdaBelief(
+    optimizer_G = optim.Adam(
         itertools.chain(GC.parameters(), GL.parameters()),
-        lr=args.lr, betas=betas
+        lr=args.lr, betas=args.betas
     )
-    optimizer_D = AdaBelief(
+    optimizer_D = optim.Adam(
         itertools.chain(DC.parameters(), DL.parameters()),
-        lr=args.lr, betas=betas
+        lr=args.lr, betas=args.betas
     )
 
     train(

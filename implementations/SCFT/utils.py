@@ -10,14 +10,14 @@ from torchvision.utils import save_image
 from torch.utils.data import random_split
 import numpy as np
 
-from ..general import XDoGAnimeFaceDataset, XDoGDanbooruPortraitDataset, to_loader
-from ..general import Status, get_device, save_args
-from ..gan_utils import DiffAugment
-from ..gan_utils.losses import LSGANLoss, VGGLoss
+from dataset import AnimeFaceXDoG, DanbooruPortraitXDoG, to_loader
+from utils import Status, add_args, save_args
+from nnutils.loss import LSGANLoss, VGGLoss
+from nnutils import get_device
+from thirdparty.diffaugment import DiffAugment
 
 from .tps import tps_transform
 from .model import Generator, Discriminator, init_weight_kaiming, init_weight_xavier, init_weight_N002
-
 
 l1_loss = nn.L1Loss()
 def triplet_loss(anchor, negative, positive, margin):
@@ -38,7 +38,7 @@ def train(
 ):
 
     status = Status(max_iters)
-    loss   = LSGANLoss()    
+    loss   = LSGANLoss()
     vgg    = VGGLoss(device, p=1)
     scaler = GradScaler() if amp else None
 
@@ -66,7 +66,7 @@ def train(
                 # loss
                 # adv
                 D_loss = loss.d_loss(real_prob, fake_prob)
-            
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -118,7 +118,7 @@ def train(
                     nrow=3*3, normalize=True, value_range=(-1, 1)
                 )
                 torch.save(G.state_dict(), f'implementations/SCFT/result/G_{status.batches_done}.pt')
-            
+
             save_image(fake, 'running.jpg', nrow=5, normalize=True, value_range=(-1, 1))
 
             # updates
@@ -126,10 +126,10 @@ def train(
                 G=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0,
                 D=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
-            
+
             if status.batches_done == max_iters:
                 break
 
@@ -145,36 +145,32 @@ def _image_grid(src, ref, gen):
         images.extend([src, ref, gen])
     return torch.cat(images, dim=0)
 
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=9, type=int, help='number of images for eval')
-
-    parser.add_argument('--sketch-channels', default=1, type=int, help='number of channels in sketch images')
-    parser.add_argument('--ref-channels', default=3, type=int, help='number of channels in reference images')
-    parser.add_argument('--bottom-width', default=8, type=int, help='bottom width in model')
-    parser.add_argument('--enc-channels', default=16, type=int, help='channel width multiplier for encoder/decoder')
-    parser.add_argument('--layer-per-resl', default=2, type=int, help='number of layers per resolution')
-    parser.add_argument('--num-res-blocks', default=7, type=int, help='number of residual blocks in G')
-    parser.add_argument('--disable-sn', default=False, action='store_true', help='disable spectral norm')
-    parser.add_argument('--disable-bias', default=False, action='store_true', help='disable bias')
-    parser.add_argument('--enable-scft-bias', default=False, action='store_true', help='enable bias in SCFT (attention)')
-    parser.add_argument('--norm-name', default='in', choices=['in', 'bn'], help='normalization layer name')
-    parser.add_argument('--act-name', default='lrelu', choices=['lrelu', 'relu'], help='activation function name')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--d-channels', default=32, type=int, help='channel width multiplier for D')
-
-    parser.add_argument('--d-lr', default=0.0002, type=float, help='learning rate for D')
-    parser.add_argument('--g-lr', default=0.0001, type=float, help='learning rate for G')
-    parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-    parser.add_argument('--recon-lambda', default=30., type=float, help='lambda for reconstruction loss')
-    parser.add_argument('--triplet-lambda', default=1., type=float, help='lambda for triplet loss')
-    parser.add_argument('--margin', default=12., type=float, help='margin for triplet loss')
-    parser.add_argument('--perc-lambda', default=0.01, type=float, help='lambda for perceptual loss')
-    parser.add_argument('--style-lambda', default=50., type=float, help='lambda for style loss')
-    return parser
-
 def main(parser):
-    
-    parser = add_arguments(parser)
+
+    parser = add_args(parser,
+        dict(
+            num_test         = [9, 'number of image for eval'],
+            sketch_channels  = [1, 'number of channels for sketch images'],
+            ref_channels     = [3, 'number of channels for reference images'],
+            bottom_width     = [8, 'bottom width'],
+            enc_channels     = [16, 'channel width multiplier for encoder/decoder'],
+            layer_per_resl   = [2, 'number of layers per resolution'],
+            num_res_blocks   = [7, 'number of residual blocks in G'],
+            disable_sn       = [False, 'disable spectral norm'],
+            disable_bias     = [False, 'disable bias'],
+            enable_scft_bias = [False, 'enable bias in scft'],
+            norm_name        = ['in', 'normalization layer name'],
+            act_name         = ['lrelu', 'activation function name'],
+            num_layers       = [3, 'number of layers in D'],
+            d_channels       = [32, 'channels_width multiplier'],
+            d_lr             = [0.0002, 'learning rate for D'],
+            g_lr             = [0.0001, 'learning rate for G'],
+            betas            = [[0.5, 0.999], 'betas'],
+            recon_lambda     = [30., 'lambda for reconstruction loss'],
+            triplet_lambda   = [1., 'lambda for triplet loss'],
+            margin           = [12., 'margin for triplet loss'],
+            perc_lambda      = [0.01, 'lambda for percrptual loss'],
+            style_lambda     = [50., 'lambda for style loss']))
     args = parser.parse_args()
     save_args(args)
 
@@ -183,14 +179,14 @@ def main(parser):
 
     # data
     if args.dataset == 'animeface':
-        dataset = XDoGAnimeFaceDataset(args.image_size, args.min_year)
+        dataset = AnimeFaceXDoG(args.image_size, args.min_year)
     elif args.dataset == 'danbooru':
-        dataset = XDoGDanbooruPortraitDataset(args.image_size, num_images=args.num_images+args.num_test)
+        dataset = DanbooruPortraitXDoG(args.image_size, args.num_images+args.num_test)
     dataset, test = random_split(dataset, [len(dataset)-args.num_test, args.num_test])
     # train
-    dataset = to_loader(dataset, args.batch_size, use_gpu=not args.disable_gpu)
+    dataset = to_loader(dataset, args.batch_size, pin_memory=not args.disable_gpu)
     # test
-    test = to_loader(test, args.num_test, shuffle=False, use_gpu=False)
+    test = to_loader(test, args.num_test, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 

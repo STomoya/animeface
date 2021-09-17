@@ -1,19 +1,15 @@
 
 import functools
-import itertools
-import copy
-
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
-import numpy as np
 
-from ..general import YearAnimeFaceDataset, to_loader
-from ..general import get_device, Status, save_args
-from ..gan_utils import sample_nnoise, update_ema, init, DiffAugment
-from ..gan_utils.losses import GANLoss, GradPenalty
+from dataset import AnimeFace
+from utils import Status, add_args, save_args
+from nnutils import sample_nnoise, get_device, update_ema, init
+from nnutils.loss import NonSaturatingLoss, r1_regularizer
+from thirdparty.diffaugment import DiffAugment
 
 from .model import Generator, Discriminator, MultiAxisAttention
 
@@ -25,8 +21,8 @@ def train(
 ):
 
     status = Status(max_iters)
-    loss   = GANLoss()
-    gp     = GradPenalty()
+    loss   = NonSaturatingLoss()
+    gp     = r1_regularizer()
     scaler = GradScaler() if amp else None
 
     while status.batches_done < max_iters:
@@ -51,7 +47,7 @@ def train(
                 D_loss = loss.d_loss(real_prob, fake_prob)
                 if gp_lambda > 0:
                     D_loss = D_loss \
-                        + gp.r1_regularizer(real, D, scaler) * gp_lambda
+                        + gp(real, D, scaler) * gp_lambda
 
             if scaler is not None:
                 scaler.scale(D_loss).backward()
@@ -97,37 +93,14 @@ def train(
                 G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
                 D=D_loss.item() if not torch.isnan(D_loss).any() else 0
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
 
-    status.plot()
-
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=16, type=int)
-
-    parser.add_argument('--arch', default=None, choices=['s', 'b', 'l'])
-    parser.add_argument('--latent-dim', default=128, type=int)
-    parser.add_argument('--dims', default=[512, 512, 256, 128, 64, 64], type=int, nargs='+')
-    parser.add_argument('--bottom', default=8, type=int)
-    parser.add_argument('--low-stages', default=4, type=int)
-    parser.add_argument('--num-heads', default=[16, 8, 4, 4, 4, 4], type=int, nargs='+')
-    parser.add_argument('--num-blocks', default=[2, 2, 2, 2, 2, 2], type=int, nargs='+')
-    parser.add_argument('--patch-sizes', default=[4, 4, 8, 8], type=int, nargs='+')
-    parser.add_argument('--channels', default=32, type=int)
-    parser.add_argument('--max-channels', default=512, type=int)
-    parser.add_argument('--act-name', default='lrelu', choices=['lrelu', 'relu'])
-    parser.add_argument('--ema', default=False, action='store_true')
-
-    parser.add_argument('--init-func', default='xavier', choices=['N01', 'N002', 'xavier', 'kaiming'])
-    parser.add_argument('--lr', default=0.0001, type=float)
-    parser.add_argument('--betas', default=[0.5, 0.99], type=float, nargs=2)
-    parser.add_argument('--gp-lambda', default=0., type=float)
-    parser.add_argument('--policy', default='color,translation')
-    return parser
+    status.plot_loss()
 
 def set_args_by_arch(args):
     # same params for all arch
@@ -157,7 +130,26 @@ def adjust_by_size(args):
     return args
 
 def main(parser):
-    parser = add_arguments(parser)
+    # parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(num_test=[16, 'number of test images'],
+            arch=[str, 'architecture. one of "s", "b" or "l"'],
+            latent_dim=[128, 'input latent dim'],
+            dims=[[512, 512, 256, 128, 64, 64], 'channel dimension for each stage'],
+            bottom=[8, 'bottom width'],
+            low_stages=[4, 'number of low stages'],
+            num_heads=[[16, 8, 4, 4, 4, 4], 'number of heads in attention for each stage'],
+            num_blocks=[[2, 2, 2, 2, 2, 2], 'number of blocks in each stage'],
+            patch_sizes=[[4, 4, 8, 8], 'patch size'],
+            channels=[32, 'channel width multiplier'],
+            max_channels=[512, 'maximum channel width'],
+            act_name=['lrelu', 'activation function name'],
+            ema=[False, 'use EMA'],
+            init_func=['xavier', 'one of "N01", "N002", "xavier" or "kaiming"'],
+            lr=[0.0001, 'learning rate'],
+            betas=[[0.5, 0.99], 'betas'],
+            gp_lambda=[0., 'lambda for gradient penalty'],
+            policy=['color,translation', 'policy for diffaugment']))
     args = parser.parse_args()
     if args.arch is not None:
         args = set_args_by_arch(args)
@@ -167,8 +159,9 @@ def main(parser):
     device = get_device(not args.disable_gpu)
     amp = not args.disable_gpu and not args.disable_amp
 
-    dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
-    dataset = to_loader(dataset, args.batch_size)
+    dataset = AnimeFace.asloader(
+        args.batch_size, (args.image_size, args.min_year),
+        pin_memory=not args.disable_gpu)
 
     sampler = functools.partial(sample_nnoise, device=device)
     const_z = sampler((args.num_test, args.latent_dim))

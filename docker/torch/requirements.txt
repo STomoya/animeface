@@ -1,11 +1,9 @@
-torch-summary
 scikit-learn
 matplotlib
 tqdm
-chainer
-illustration2vec
-scikit-image
 scipy
 kornia
 opencv-python
 opt_einsum
+loguru
+rich

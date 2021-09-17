@@ -1,8 +1,5 @@
 
-import functools
-
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
@@ -10,10 +7,10 @@ import torchvision.transforms.functional as TF
 import torch.nn.functional as F
 from torch.utils.data import random_split
 
-from ..general import get_device, Status, save_args
-from ..gan_utils import init
-from ..gan_utils.losses import GANLoss, VGGLoss
-from ..general import DanbooruPortraitSRDataset, to_loader
+from dataset import DanbooruPortraitSR, to_loader
+from utils import Status, save_args, add_args
+from nnutils import init, get_device
+from nnutils.loss import NonSaturatingLoss, VGGLoss
 
 from .model import Generator, Discriminator
 
@@ -23,9 +20,9 @@ def train(
     adv_lambda, vgg_lambda,
     amp, device, save
 ):
-    
+
     status = Status(max_iters)
-    loss   = GANLoss()
+    loss   = NonSaturatingLoss()
     vgg    = VGGLoss(device)
     scaler = GradScaler() if amp else None
 
@@ -50,7 +47,7 @@ def train(
                 for real_out, fake_out in zip(real_outs, fake_outs):
                     D_loss = D_loss \
                         + loss.d_loss((real_out[0] - fake_out[0].mean()), (fake_out[0] - real_out[0].mean()))
-                
+
             if scaler is not None:
                 scaler.scale(D_loss).backward()
                 scaler.step(optimizer_D)
@@ -70,7 +67,7 @@ def train(
                 for fake_out, real_out in zip(fake_outs, real_outs):
                     G_loss = G_loss \
                         + loss.g_loss(fake_out[0] - real_out[0].mean()) * adv_lambda
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -96,19 +93,19 @@ def train(
                 D=D_loss.item() if not torch.any(torch.isnan(D_loss)) else 0.,
                 G=G_loss.item() if not torch.any(torch.isnan(G_loss)) else 0.
             )
-            status.update(loss_dict)
+            status.update(**loss_dict)
             if scaler is not None:
                 scaler.update()
 
             if status.batches_done == max_iters:
                 break
 
-    status.plot()
+    status.plot_loss()
 
 def _image_grid(src, dst, gen, upsample=False):
     _split = lambda x: x.chunk(x.size(0), dim=0)
     srcs = _split(src)
-    dsts = _split(dst)                
+    dsts = _split(dst)
     gens = _split(gen)
 
     images = []
@@ -121,38 +118,31 @@ def _image_grid(src, dst, gen, upsample=False):
         images.extend([src, dst, gen])
     return torch.cat(images, dim=0)
 
-def add_arguments(parser):
-    parser.add_argument('--num-test', default=6, type=int, help='number of samples used in eval')
-    parser.add_argument('--scale', default=2, type=int, help='upsample scale')
-    # model
-    parser.add_argument('--disable-sn', default=False, action='store_true', help='disable spectral norm')
-    parser.add_argument('--disable-bias', default=False, action='store_true', help='disable bias')
-    # G
-    parser.add_argument('--image-channels', default=3, type=int, help='input image channels')
-    parser.add_argument('--g-channels', default=64, type=int, help='channel width multiplier for G')
-    parser.add_argument('--hidden-channels', default=32, type=int, help='channels of outputs for convolutions in dense block')
-    parser.add_argument('--num-blocks', default=7, type=int, help='number of residual blocks in G')
-    parser.add_argument('--num-rd', default=3, type=int, help='number of residual dense block in one residual in residual dense block')
-    parser.add_argument('--num-conv', default=5, type=int, help='number of convolution layer is dense block')
-    parser.add_argument('--g-norm-name', default='', choices=['bn', 'in'], help='normalization layer name for G')
-    parser.add_argument('--g-act-name', default='lrelu', choices=['relu', 'lrelu', 'prelu'], help='activation function name for G')
-    # D
-    parser.add_argument('--num-scale', default=2, type=int, help='number of scales in D')
-    parser.add_argument('--d-channels', default=32, type=int, help='channel width multiplier for D')
-    parser.add_argument('--num-layers', default=3, type=int, help='number of layers in D')
-    parser.add_argument('--d-norm-name', default='in', choices=['bn', 'in'], help='normalization layer name for D')
-    parser.add_argument('--d-act-name', default='lrelu', choices=['relu', 'lrelu', 'prelu'], help='activation function name for D')
-
-    # training
-    parser.add_argument('--lr', default=0.0002, type=float, help='learning rate')
-    parser.add_argument('--betas', default=[0.5, 0.999], type=float, nargs=2, help='betas')
-    parser.add_argument('--adv-lambda', default=0.001, type=float, help='lambda for adversarial loss')
-    parser.add_argument('--vgg-lambda', default=1., type=float, help='lambda for perceptual loss')
-    return parser
-
 def main(parser):
 
-    parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            num_test        =[6, 'number of test data'],
+            scale           =[2., 'upsample scale'],
+            disable_sn      =[False, 'disable spectral norm'],
+            disable_bias    =[False, 'disable bias'],
+            image_channels  =[3, 'image channels'],
+            g_channels      =[64, 'channel width multiplier'],
+            hidden_channels =[32, 'dense block output channel width'],
+            num_blocks      =[7, 'number of residual blocks'],
+            num_rd          =[3, 'number of residual dense block in one residual in residual dense block'],
+            num_conv        =[5, 'number of conv layer in dense block'],
+            g_norm_name     =['', 'normalization layer name'],
+            g_act_name      =['lrelu', 'activation function name'],
+            num_scale       =[2, 'number of scale'],
+            d_channels      =[32, 'channel width multiplier'],
+            num_layers      =[3, 'number of layers'],
+            d_norm_name     =['in', 'normalization layer name'],
+            d_act_name      =['lrelu', 'activation function name'],
+            lr              =[0.0002, 'learning rate'],
+            betas           =[[0.5, 0.999], 'betas'],
+            adv_lambda      =[0.001, 'lambda for adversarial loss'],
+            vgg_lambda      =[1., 'lambda for perceptual loss']))
     args = parser.parse_args()
     save_args(args)
 
@@ -160,12 +150,12 @@ def main(parser):
     device = get_device(not args.disable_gpu)
 
     # dataset
-    dataset = DanbooruPortraitSRDataset(args.image_size, scale=args.scale, num_images=args.num_images+args.num_test)
+    dataset = DanbooruPortraitSR(args.image_size, scale=args.scale, num_images=args.num_images+args.num_test)
     dataset, test = random_split(dataset, [len(dataset)-args.num_test, args.num_test], generator=torch.Generator().manual_seed(1234))
     ## training dataset
     dataset = to_loader(dataset, args.batch_size)
     ## test batch
-    test    = to_loader(test, args.num_test, shuffle=False, use_gpu=False)
+    test    = to_loader(test, args.num_test, shuffle=False, pin_memory=False)
     test_batch = next(iter(test))
     test_batch = (test_batch[0].to(device), test_batch[1].to(device))
 

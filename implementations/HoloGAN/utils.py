@@ -1,4 +1,6 @@
 
+from functools import partial
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,9 +8,13 @@ import numpy as np
 
 from torchvision.utils import save_image
 
+from dataset import AnimeFace
+from utils import Status, save_args, add_args
+from nnutils import get_device, sample_unoise
+from nnutils.loss import GANLoss
+from thirdparty.diffaugment import DiffAugment
+
 from .model import Generator, Discriminator
-from ..general import AnimeFaceDataset, to_loader, save_args
-from ..gan_utils import DiffAugment
 
 def gen_theta(
     num_gen, minmax_angles=[0, 0, 220, 320, 0, 0],
@@ -87,7 +93,7 @@ def gen_theta(
     def pad_matrix(matrix):
         # pad 0 to fit size Bx3x4. (required by torch.nn.functional.affine_grid() for 5D tensor.)
         return np.hstack([matrix, np.zeros((3, 1))])
-    
+
     # calc total rotation matrix
     samples_x = samples[:, 0]
     samples_y = samples[:, 1]
@@ -95,17 +101,16 @@ def gen_theta(
     theta = np.zeros((num_gen, 3, 4))
     for i in range(num_gen):
         theta[i] = pad_matrix(np.dot(np.dot(rotation_matrix_z(samples_z[i]), rotation_matrix_y(samples_y[i])), rotation_matrix_x(samples_x[i])))
-    
+
     theta = torch.from_numpy(theta).float()
     return theta
 
 def train(
-    epochs, batch_size, noise_channels, eval_size,
-    dataset, DiffAugment, policy,
+    max_iters, batch_size, noise_channels, eval_size,
+    dataset, augment,
     G, D, optimizer_G, optimizer_D,
-    gan_criterion, style_lambda, identity_lambda,
-    device,
-    save_interval=1000, verbose_interval=1000
+    style_lambda, identity_lambda,
+    device, save_interval=1000
 ):
 
     Tensor = torch.FloatTensor
@@ -116,23 +121,18 @@ def train(
     const_theta = gen_theta(eval_size, random=False)
     const_theta = const_theta.type(Tensor).to(device)
 
-    batches_done = 0
+    status = Status(max_iters)
+    loss   = GANLoss()
 
-    if DiffAugment:
-        aug = DiffAugment
-    else:
-        aug = lambda x : x
-
-    for epoch in range(epochs):
+    while status.batches_done < max_iters:
 
         for index, img in enumerate(dataset):
 
             # real image
-            img = img.type(Tensor).to(device)
-            img = aug(img, policy)
+            img = img.to(device)
+            img = augment(img)
             # random variables
-            z = torch.empty((batch_size, noise_channels)).uniform_(-1, 1)
-            z = z.type(Tensor).to(device)
+            z = sample_unoise((img.size(0), noise_channels), device)
             theta = gen_theta(batch_size)
             theta = theta.type(Tensor).to(device)
 
@@ -141,18 +141,18 @@ def train(
             '''
             # D(x)
             real_prob,     _, real_logits = D(img)
-            real_loss = gan_criterion(real_prob, torch.ones(real_prob.size(), device=device))
             # D(G(z))
             fake = G(z, theta)
-            fake = aug(fake, policy)
+            fake = augment(fake)
             fake_prob, z_rec, fake_logits = D(fake.detach())
-            fake_loss = gan_criterion(fake_prob, torch.zeros(fake_prob.size(), device=device))
+
+            adv_loss = loss.d_loss(real_prob, fake_prob)
             # style loss
             style_loss = style_criterion(fake_logits, real_logits, style_lambda)
             # identity loss
             id_loss = identity_criterion(z, z_rec, identity_lambda)
             # total
-            D_loss = real_loss + fake_loss + style_loss + id_loss
+            D_loss = adv_loss + style_loss + id_loss
 
             # optimization
             optimizer_D.zero_grad()
@@ -164,29 +164,39 @@ def train(
             Generator
             '''
             # D(G(z))
-            fake = G(z, theta)
-            fake = aug(fake, policy)
             fake_prob, z_rec, fake_logits = D(fake)
-            fake_loss = gan_criterion(fake_prob, torch.ones(fake_prob.size(), device=device))
+            adv_loss = loss.g_loss(fake_prob)
             # identity loss
             id_loss = identity_criterion(z, z_rec, identity_lambda)
             # total
-            G_loss = fake_loss + id_loss
+            G_loss = adv_loss + id_loss
 
             # optimization
             optimizer_G.zero_grad()
             G_loss.backward()
             optimizer_G.step()
 
-
-            batches_done += 1
-            # verbose
-            if batches_done % verbose_interval == 0 or batches_done == 1:
-                print('{:6} [{:4} / {:4}] [G LOSS : {:.5f}] [D LOSS : {:.5f}]'.format(batches_done, epoch, epochs, G_loss.item(), D_loss.item()))
             # save sample images
-            if batches_done % save_interval == 0 or batches_done == 1:
+            if status.batches_done % save_interval == 0:
                 test_img = G(const_noise, const_theta)
-                save_image(test_img, './implementations/HoloGAN/result/{}.png'.format(batches_done), nrow=10, normalize=True, value_range=(-1, 1))
+                save_image(
+                    test_img, f'./implementations/HoloGAN/result/{status.batches_done}.png',
+                    nrow=10, normalize=True, value_range=(-1, 1))
+                torch.save(
+                    G.state_dict(),
+                    f'implementations/HoloGAN/result/G_{status.batches_done}.pt')
+
+            # updates
+            loss_dict = dict(
+                G=G_loss.item() if not torch.isnan(G_loss).any() else 0,
+                D=D_loss.item() if not torch.isnan(D_loss).any() else 0
+            )
+            status.update(**loss_dict)
+
+            if status.batches_done == max_iters:
+                break
+
+    status.plot_loss()
 
 
 def style_criterion(fake_logits, real_logits, style_lambda=1.):
@@ -199,54 +209,48 @@ def style_criterion(fake_logits, real_logits, style_lambda=1.):
 def identity_criterion(z, z_reconstruct, identity_lambda=1):
     return identity_lambda * ((z_reconstruct - z) ** 2).mean()
 
-def add_arguments(parser):
-    parser.add_argument('--g-channels', default=512, type=int, help='base number of channels in G')
-    parser.add_argument('--d-channels', default=64, type=int, help='base number of channels in D')
-    parser.add_argument('--latent-dim', default=128, type=int, help='dimension of latent')
-    parser.add_argument('--activation', default='lrelu', choices=['relu', 'lrelu'], help='activation function')
-
-    parser.add_argument('--epochs', default=150, type=int, help='epochs to train')
-    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0.5, type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.999, type=float, help='beta2')
-    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
-    parser.add_argument('--style-lambda', default=1., type=float, help='lambda for style loss')
-    parser.add_argument('--identity-lambda', default=1., type=float, help='lambda for identity loss')
-    parser.add_argument('--eval-size', default=10, type=int, help='number for images for evaluation')
-    return parser
-
 def main(parser):
 
-    parser = add_arguments(parser)
+    # parser = add_arguments(parser)
+    parser = add_args(parser,
+        dict(
+            g_channels      = [512, 'base channel width'],
+            d_channels      = [64, 'base channel width'],
+            latent_dim      = [128, 'input latent dimension'],
+            activation      = ['lrelu', 'activation function name'],
+            lr              = [0.0001, 'learning rate'],
+            betas           = [[0.5, 0.999], 'betas'],
+            policy          = ['color,translation', 'policy for diffaugment'],
+            style_lambda    = [1., 'lambda for style loss'],
+            identity_lambda = [1., 'lambda for identity loss'],
+            eval_size       = [10, 'number of samples for eval']))
     args = parser.parse_args()
     save_args(args)
 
-    betas = (args.beta1, args.beta2)
+    device = get_device(not args.disable_gpu)
 
-    dataset = AnimeFaceDataset(args.image_size)
-    dataset = to_loader(dataset, args.batch_size)
+    dataset = AnimeFace.asloader(
+        args.batch_size, (args.image_size, args.min_year),
+        pin_memory=not args.disable_gpu)
 
     G = Generator(args.g_channels, args.latent_dim, args.activation)
     D = Discriminator(args.d_channels, args.latent_dim, args.activation, args.image_size)
 
-    if not args.disable_gpu:
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device('cpu')
-
     G.to(device)
     D.to(device)
 
-    optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=betas)
-    optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=betas)
+    optimizer_G = optim.Adam(G.parameters(), lr=args.lr, betas=args.betas)
+    optimizer_D = optim.Adam(D.parameters(), lr=args.lr, betas=args.betas)
 
-    gan_criterion = nn.BCEWithLogitsLoss()
-    
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
+
+    augment = partial(DiffAugment, policy=args.policy)
+
     train(
-        args.epochs, args.batch_size, args.latent_dim, args.eval_size,
-        dataset, DiffAugment, args.policy,
+        args.max_iters, args.batch_size, args.latent_dim, args.eval_size,
+        dataset, augment,
         G, D, optimizer_G, optimizer_D,
-        gan_criterion, args.style_lambda, args.identity_lambda,
-        device,
-        1000, 1000
+        args.style_lambda, args.identity_lambda,
+        device, 1000
     )

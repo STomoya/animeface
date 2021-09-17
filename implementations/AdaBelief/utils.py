@@ -2,66 +2,44 @@
 import functools
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import grad, Variable
 from torch.cuda.amp import autocast, GradScaler
-from tqdm import tqdm
+from torchvision.utils import save_image
+
+from dataset import AnimeFace
+from utils import Status, save_args, add_args
+from nnutils import get_device, sample_nnoise
+from nnutils.loss.gan import NonSaturatingLoss
+from nnutils.loss.penalty import r1_regularizer
+from thirdparty.diffaugment import DiffAugment
 
 from ..StyleGAN2.model import Generator, Discriminator, init_weight_N01
-from ..general import YearAnimeFaceDataset, to_loader, save_args, get_device
-from ..gan_utils import GANTrainingStatus, sample_nnoise, DiffAugment, AdaAugment
-from ..gan_utils.losses import GANLoss
 from .AdaBelief import AdaBelief
 
-def r1_gp(D, real, scaler=None):
-    inputs = Variable(real, requires_grad=True)
-    outputs = D(inputs).sum()
-    ones = torch.ones(outputs.size(), device=real.device)
-    with autocast(False):
-        if scaler is not None:
-            outputs = scaler.scale(outputs)[0]
-        gradients = grad(
-            outputs=outputs,
-            inputs=inputs,
-            grad_outputs=ones,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True
-        )[0]
-        if scaler is not None:
-            gradients = gradients / scaler.get_scale()
-    gradients = gradients.view(gradients.size(0), -1)
-    penalty = gradients.norm(2, dim=1).pow(2).mean()
-    return penalty / 2
-
 def train(
-    max_iter, dataset, sample_noise, style_dim,
+    max_iters, dataset, sample_noise, style_dim,
     G, D, optimizer_G, optimizer_D,
     gp_lambda, policy,
     device, amp, save_interval=1000
 ):
-    
-    status = GANTrainingStatus()
-    loss = GANLoss()
-    scaler = GradScaler() if amp else None
-    const_z = sample_nnoise((16, style_dim))
-    bar = tqdm(total=max_iter)
 
-    if policy == 'ada':
-        augment = AdaAugment(0.6, 500000, device)
-    elif policy is not '':
+    status = Status(max_iters)
+    loss   = NonSaturatingLoss()
+    r1_gp  = r1_regularizer()
+    scaler = GradScaler() if amp else None
+    const_z = sample_noise((16, style_dim))
+
+    if policy != '':
         augment = functools.partial(DiffAugment, policy=policy)
     else:
         augment = lambda x: x
-    
-    while status.batches_done < max_iter:
+
+    while status.batches_done < max_iters:
         for index, real in enumerate(dataset):
-            optimizer_G.zero_grad()
-            optimizer_D.zero_grad()
+            G.zero_grad()
+            D.zero_grad()
 
             real = real.to(device)
-            z = sample_noise()
+            z = sample_noise((real.size(0), style_dim))
 
             '''Discriminator'''
             with autocast(amp):
@@ -75,7 +53,7 @@ def train(
                 # loss
                 adv_loss = loss.d_loss(real_prob, fake_prob)
                 if gp_lambda > 0:
-                    r1_loss = r1_gp(D, real, scaler)
+                    r1_loss = r1_gp(real, D, scaler)
                 else:
                     r1_loss = 0
                 D_loss = adv_loss + r1_loss * gp_lambda
@@ -86,17 +64,14 @@ def train(
             else:
                 D_loss.backward()
                 optimizer_D.step()
-            
+
             '''Generator'''
-            z = sample_noise()
             with autocast(amp):
                 # D(G(z))
-                fake, _ = G(z)
-                fake = augment(fake)
                 fake_prob = D(fake)
                 # loss
                 G_loss = loss.g_loss(fake_prob)
-            
+
             if scaler is not None:
                 scaler.scale(G_loss).backward()
                 scaler.step(optimizer_G)
@@ -109,77 +84,53 @@ def train(
                 with torch.no_grad():
                     image, _ = G(const_z)
                 G.train()
-                status.save_image('implementations/AdaBelief/result', image, nrow=4)
+                save_image(
+                    image, f'implementations/AdaBelief/result/{status.batches_done}.png',
+                    nrow=4, normalize=True, value_range=(-1, 1))
+            save_image(fake, 'running.jpg', normalize=True, value_range=(-1, 1))
 
-            G_loss_pyfloat, D_loss_pyfloat = G_loss.item(), D_loss.item()
-            status.append(G_loss_pyfloat, D_loss_pyfloat)
+            status.update(g=G_loss.item(), d=D_loss.item())
             if scaler is not None:
                 scaler.update()
-            if policy == 'ada':
-                augment.update_p(real_prob)
-            bar.set_postfix_str('G {:.5f} D {:.5f}'.format(G_loss_pyfloat, D_loss_pyfloat))
-            bar.update(1)
 
-            if status.batches_done == max_iter:
+            if status.batches_done == max_iters:
                 break
-
-def add_argument(parser):
-    parser.add_argument('--image-channels', default=3, type=int, help='number of channels for the generated image')
-    parser.add_argument('--style-dim', default=512, type=int, help='style feature dimension')
-    parser.add_argument('--channels', default=32, type=int, help='channel width multiplier')
-    parser.add_argument('--max-channels', default=512, type=int, help='maximum channels')
-    parser.add_argument('--block-num-conv', default=2, type=int, help='number of convolution layers in residual block')
-    parser.add_argument('--map-num-layers', default=8, type=int, help='number of layers in mapping network')
-    parser.add_argument('--map-lr', default=0.01, type=float, help='learning rate for mapping network')
-    parser.add_argument('--disable-map-norm', default=False, action='store_true', help='disable pixel normalization in mapping network')
-    parser.add_argument('--mbsd-groups', default=4, type=int, help='number of groups in mini-batch standard deviation')
-
-    parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-    parser.add_argument('--beta1', default=0., type=float, help='beta1')
-    parser.add_argument('--beta2', default=0.99, type=float, help='beta2')
-    parser.add_argument('--gp-lambda', default=10, type=float, help='lambda for r1')
-    parser.add_argument('--policy', default='color,translation', type=str, help='policy for DiffAugment')
-    return parser
 
 def main(parser):
 
-    parser = add_argument(parser)
+    parser = add_args(parser,
+        dict(
+            image_channels   = [3,     'number of channels for the generated image'],
+            style_dim        = [512,   'style feature dimension'],
+            channels         = [32,    'channel width multiplier'],
+            max_channels     = [512,   'maximum channels'],
+            block_num_conv   = [2,     'number of convolution layers in residual block'],
+            map_num_layers   = [8,     'number of layers in mapping network'],
+            map_lr           = [0.01,  'learning rate for mapping network'],
+            disable_map_norm = [False, 'disable pixel normalization'],
+            mbsd_groups      = [4,     'number of groups in mini-batch stddev'],
+            lr               = [0.001, 'learning rate'],
+            betas            = [[0.1, 0.99], 'betas'],
+            gp_lambda        = [10.,   'lambda for r1'],
+            policy           = ['color,translation', 'policy for DiffAugment']))
     args = parser.parse_args()
     save_args(args)
 
-    # # data
-    # image_size = 128
-    # min_year = 2010
-    # batch_size = 32
-
-    # # model
-    # mapping_layers = 8
-    # mapping_lr = 0.01
-    # style_dim = 512
-
-    # # training
-    # max_iters = -1
-    # lr = 0.0002
-    betas = (args.beta1, args.beta2)
     normalize = not args.disable_map_norm
-    # gp_lambda = 0
-    # policy = 'color,translation'
-    # policy = 'ada'
 
-    amp = not args.disable_amp
-
+    amp = not args.disable_amp and not args.disable_gpu
     device = get_device(not args.disable_gpu)
 
-    dataset = YearAnimeFaceDataset(args.image_size, args.min_year)
-    dataset = to_loader(dataset, args.batch_size)
+    dataset = AnimeFace.asloader(
+        args.batch_size, (args.image_size, args.min_year))
 
-    sample_noise = functools.partial(sample_nnoise, size=(args.batch_size, args.style_dim), device=device)
+    sample_noise = functools.partial(sample_nnoise, device=device)
 
     G = Generator(
             args.image_size, args.image_channels, args.style_dim, args.channels, args.max_channels,
             args.block_num_conv, args.map_num_layers, normalize, args.map_lr)
     D = Discriminator(
-            args.image_size, args.image_channels, args.channels, args.max_channels, 
+            args.image_size, args.image_channels, args.channels, args.max_channels,
             args.block_num_conv, args.mbsd_groups)
     G.init_weight(
         map_init_func=functools.partial(init_weight_N01, lr=args.map_lr),
@@ -188,8 +139,9 @@ def main(parser):
     G.to(device)
     D.to(device)
 
-    optimizer_G = AdaBelief(G.parameters(), lr=args.lr, betas=betas)
-    optimizer_D = AdaBelief(D.parameters(), lr=args.lr, betas=betas)
+    assert args.betas[0] != 0 and args.betas[1] != 0
+    optimizer_G = AdaBelief(G.parameters(), lr=args.lr, betas=args.betas)
+    optimizer_D = AdaBelief(D.parameters(), lr=args.lr, betas=args.betas)
 
     if args.max_iters < 0:
         args.max_iters = len(dataset) * args.default_epochs
@@ -197,5 +149,5 @@ def main(parser):
     train(
         args.max_iters, dataset, sample_noise, args.style_dim,
         G, D, optimizer_G, optimizer_D, args.gp_lambda, args.policy,
-        device, amp, 1000
+        device, amp, args.save
     )

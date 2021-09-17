@@ -7,108 +7,105 @@ import numpy as np
 
 from .model import Generator, Discriminator
 
-from ..general import AnimeFaceDataset, to_loader, save_args
+from utils import Status, add_args, save_args
+from nnutils import get_device, sample_nnoise
+from nnutils.loss.gan import GANLoss
+from dataset import AnimeFace
 
 def train(
-    epochs,
+    max_iters,
     dataset,
     latent_dim,
     G,
     optimizer_G,
     D,
     optimizer_D,
-    criterion,
     device,
-    verbose_interval,
     save_interval
 ):
-    
-    for epoch in range(epochs):
-        for index, image in enumerate(dataset, 1):
-            # label smoothing
-            gt   = torch.from_numpy((1.2 - 0.7) * np.random.randn(image.size(0), 1) + 0.7)
-            gt   = gt.type(torch.FloatTensor).to(device)
-            fake = torch.from_numpy((0.3 - 0.0) * np.random.randn(image.size(0), 1) + 0.0)
-            fake = fake.type(torch.FloatTensor).to(device)
 
+    status = Status(max_iters)
+    loss   = GANLoss()
+    const_z = sample_nnoise((16, latent_dim), device)
+
+    while status.batches_done < max_iters:
+        for index, image in enumerate(dataset, 1):
             image = image.to(device)
 
-            z = torch.from_numpy(np.random.normal(0, 10, (image.size(0), latent_dim)))
-            z = z.type(torch.FloatTensor).to(device)
+            z = sample_nnoise((image.size(0), latent_dim), device)
 
             # generate image
-            fake_image = G(z)
+            fake = G(z)
+            # D(real)
+            real_prob = D(image)
+            # D(fake)
+            fake_prob = D(fake.detach())
 
             # detect real
-            real_loss = criterion(D(image), gt)
-            # detect fake
-            fake_loss = criterion(D(fake_image.detach()), fake)
-            # total loss
-            d_loss = (real_loss + fake_loss) / 2
+            d_loss = loss.d_loss(real_prob, fake_prob)
 
             # optimize
             optimizer_D.zero_grad()
             d_loss.backward()
             optimizer_D.step()
 
+            # D(fake)
+            fake_prob = D(fake)
             # train to fool D
-            g_loss = criterion(D(fake_image), gt)
+            g_loss = loss.g_loss(fake_prob)
 
             # optimize
             optimizer_G.zero_grad()
             g_loss.backward()
             optimizer_G.step()
 
-            batches_done = epoch * len(dataset) + index
+            if status.batches_done % save_interval == 0:
+                with torch.no_grad():
+                    G.eval()
+                    images = G(const_z)
+                    G.train()
+                save_image(
+                    images, f'implementations/GAN/result/{status.batches_done}.png',
+                    nrow=4, normalize=True, value_range=(-1, 1))
+                torch.save(G.state_dict(), f'implementations/GAN/result/G_{status.batches_done}.pt')
+            save_image(fake, 'running.jpg', normalize=True, value_range=(-1, 1))
 
-            if batches_done % verbose_interval == 0:
-                print(
-                    "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-                    % (epoch, epochs, index, len(dataset), d_loss.item(), g_loss.item())
-                )
-            
-            if batches_done % save_interval == 0:
-                save_image(fake_image.data[:25], "implementations/GAN/result/%d.png" % batches_done, nrow=5, normalize=True)
+            status.update(d=d_loss.item(), g=g_loss.item())
+            if status.batches_done == max_iters:
+                break
 
-def add_arguments(parser):
-    parser.add_argument('--epochs', default=10, type=int, help='epochs to train')
-    parser.add_argument('--latent-dim', default=100, type=int, help='dimension of input latent')
-    return parser
+    status.plot_loss()
 
 def main(parser):
 
-    parser = add_arguments(parser)
+    parser = add_args(parser, {'latent-dim': [100, 'input latent dim']})
     args = parser.parse_args()
     save_args(args)
 
-    dataset = AnimeFaceDataset(args.image_size)
-    dataset = to_loader(dataset, args.batch_size)
+    dataset = AnimeFace.asloader(
+        args.batch_size, (args.image_size, args.min_year))
 
     G = Generator(latent_dim=args.latent_dim, image_shape=(3, args.image_size, args.image_size))
     D = Discriminator(image_shape=(3, args.image_size, args.image_size))
 
-    if not args.disable_gpu:
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device('cpu')
+    device = get_device(not args.disable_gpu)
     G.to(device)
     D.to(device)
 
     optimizer_G = optim.Adam(G.parameters())
     optimizer_D = optim.Adam(D.parameters())
 
-    criterion = nn.BCELoss()
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
 
     train(
-        epochs=args.epochs,
+        args.max_iters,
         dataset=dataset,
         latent_dim=args.latent_dim,
         G=G,
         optimizer_G=optimizer_G,
         D=D,
         optimizer_D=optimizer_D,
-        criterion=criterion,
         device=device,
-        verbose_interval=100,
-        save_interval=100
+        save_interval=args.save
     )

@@ -14,7 +14,7 @@ from torchvision.utils import save_image
 
 from .model import Generator, Discriminator
 
-from ..general import GeneratePairImageDanbooruDataset, to_loader
+from dataset import DanbooruAutoPair, to_loader
 
 def train(
     epochs,
@@ -156,7 +156,7 @@ def train(
             if batches_done % save_interval == 0:
                 image_grid = make_grid(A, A2B, B, n_image=999)
                 save_image(image_grid, './implementations/UGATIT/result/{}.png'.format(batches_done), nrow=9, normalize=True)
-                
+
             batches_done += 1
 
 
@@ -187,6 +187,10 @@ class SoftMozaic(object):
         return sample.resize([int(x / self.linear_scale) for x in sample.size]).resize(sample.size)
 
 def main(parser):
+    import warnings
+    warnings.warn('Reimplement. This is too old!')
+    exit()
+
     import torchvision.transforms as T
 
     epochs = 5
@@ -197,7 +201,7 @@ def main(parser):
 
     pair_trasform = SoftMozaic(1.3, 0.4)
 
-    dataset = GeneratePairImageDanbooruDataset(pair_trasform, image_size=128)
+    dataset = DanbooruAutoPair(image_size, pair_trasform)
     dataset.co_transform_head = T.Compose([
         T.CenterCrop((350, 350)),
         T.Resize(128)
@@ -223,7 +227,7 @@ def main(parser):
 
     optimizer_G = optim.Adam(itertools.chain(G_A2B.parameters(), G_B2A.parameters()), lr=lr, betas=betas)
     optimizer_D = optim.Adam(itertools.chain(local_DA.parameters(), local_DB.parameters(), global_DA.parameters(), global_DB.parameters()), lr=lr, betas=betas)
-    
+
     MSELoss = nn.MSELoss()
     L1Loss = nn.L1Loss()
     BCELoss = nn.BCEWithLogitsLoss()
