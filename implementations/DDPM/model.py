@@ -1,3 +1,11 @@
+'''
+Denoising Diffusion Probabilistic Model
+code reference :
+    #1 [lucidrains/denoising-diffusion-pytorch]
+        - https://github.com/lucidrains/denoising-diffusion-pytorch/blob/master/denoising_diffusion_pytorch/denoising_diffusion_pytorch.py
+    #2 [rosinality/denoising-diffusion-pytorch]
+        - https://github.com/rosinality/denoising-diffusion-pytorch/blob/master/diffusion.py
+'''
 
 import math
 
@@ -126,12 +134,14 @@ class GaussianDiffusion(nn.Module):
         return image
 
 
-''''''
+'''U-Net'''
 
 class Swish(nn.Module):
+    '''swish activation'''
     def forward(self, x):
         return x * torch.sigmoid(x)
 class Mish(nn.Module):
+    '''mish activation'''
     def forward(self, x):
         return x * torch.tanh(F.softplus(x))
 
@@ -274,6 +284,7 @@ class SelfAttention(nn.Module):
         return out + x
 
 class TimeEmbedding(nn.Module):
+    '''sinusoidal position embedding'''
     def __init__(self, time_dim) -> None:
         super().__init__()
         self.dim = time_dim
@@ -290,6 +301,7 @@ class TimeEmbedding(nn.Module):
         return pos_emb
 
 class ResSABlock(nn.Module):
+    ''' -> ResBlock x num_blocks -> SA -> '''
     def __init__(self,
         in_channels, out_channels, time_dim, time_affine=False,
         attn=True, num_blocks=1,

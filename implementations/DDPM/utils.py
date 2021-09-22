@@ -30,8 +30,15 @@ def train(
             t = torch.randint(0, timesteps, (real.size(0), ), device=device)
 
             with autocast(amp):
+                # add noise
+                # q(xt|x0)
+                # √α･x0 + √1-α･ε; ε~N(0,I)
                 x_noisy, noise = gaussian_diffusion.q_sample(real, t)
+                # denoise
+                # εθ(√α･x0 + √1-α･ε)
                 recon = denoise_model(x_noisy, t)
+                # pθ(xt-1|xt)
+                # ||ε - εθ(√α･x0 + √1-α･ε)||
                 loss  = loss_fn(recon, noise)
 
             if scaler is not None:
@@ -84,7 +91,7 @@ def main(parser):
             # optimization
             lr             = [2e-5, 'learning rate'],
             betas          = [[0.9, 0.999], 'betas'],
-            sample         = [10000, 'sample very']
+            sample         = [10000, 'sample very. inference takes time hence different arg for testing.']
         ))
     args = parser.parse_args()
     save_args(args)
