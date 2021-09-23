@@ -1,0 +1,34 @@
+{
+  "name": "DDPM",
+  "image_size": 128,
+  "batch_size": 8,
+  "dataset": "animeface",
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "disable_gpu": false,
+  "disable_amp": false,
+  "debug": false,
+  "num_test": 16,
+  "image_channels": 3,
+  "bottom": 16,
+  "channels": 32,
+  "attn_resls": [
+    16
+  ],
+  "attn_head": 8,
+  "time_affine": true,
+  "dropout": 0.0,
+  "num_res": 1,
+  "norm_name": "gn",
+  "act_name": "swish",
+  "timesteps": 1000,
+  "lr": 2e-05,
+  "betas": [
+    0.9,
+    0.999
+  ],
+  "sample": 10000
+}
