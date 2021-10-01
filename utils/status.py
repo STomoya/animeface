@@ -1,22 +1,54 @@
 '''utils for training status'''
 
+import os
 import warnings
 from tqdm import tqdm
 
 class Status:
     '''Status
     A class for keeping loss
-    bar: bool (default: False)
+    bar: bool (default: True)
         if True, show bar by tqdm
+    log_file: str (default: None)
+        path to the log file
+        if given, log status to a file
+    log_interval: int (default: 1)
+        interval for writing to log file
     '''
     def __init__(self,
         max_iters: int,
-        bar: bool=True
+        bar: bool=True,
+        log_file: str=None,
+        log_interval: int=1
     ) -> None:
         if bar:
             self.bar = tqdm(total=max_iters)
+        self.max_iters = max_iters
         self.batches_done = 0
         self.loss = None
+        self.log_file = log_file
+        if os.path.exists(log_file):
+            self._write_to_log('', 'w')
+        self.log_interval = log_interval
+
+    def print(self, *args, **kwargs):
+        '''print function'''
+        if hasattr(self, 'bar'):
+            tqdm.write(*args, **kwargs)
+        else:
+            print(*args, **kwargs)
+
+    def _write_to_log(self, content: str, mode='a'):
+        '''write to log file if specified'''
+        if self.log_file is None:
+            return
+        if not content.endswith('\n'):
+            content += '\n'
+        with open(self.log_file, mode) as fout:
+            fout.write(content)
+    def log(self, content):
+        '''wrapper for _write_to_log'''
+        self._write_to_log(content)
 
     def update(self, **kwargs) -> None:
         '''update status'''
@@ -28,11 +60,17 @@ class Status:
             self.loss[k].append(v)
             postfix.append(f'{k} : {v:.5f}')
 
+        if self.batches_done % self.log_interval == 0:
+            self._write_to_log(self.__str__())
+
         self.batches_done += 1
 
         if hasattr(self, 'bar'):
             self.bar.set_postfix_str(' '.join(postfix))
             self.bar.update(1)
+
+    def is_end(self):
+        return self.batches_done >= self.max_iters
 
     def load_state_dict(self, state_dict: dict) -> None:
         '''fast forward'''
@@ -47,8 +85,7 @@ class Status:
     def state_dict(self) -> dict:
         return dict(
             loss=self.loss,
-            batches_done=self.batches_done
-        )
+            batches_done=self.batches_done)
 
     def _init_loss(self, keys):
         '''initialize loss'''
