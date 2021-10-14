@@ -24,11 +24,17 @@ def sample_unoise(
 def update_ema(
     model: torch.nn.Module,
     model_ema: torch.nn.Module,
-    decay: float=0.999
+    decay: float=0.999,
+    copy_buffers: bool=False
 ) -> None:
     model.eval()
     param_ema = dict(model_ema.named_parameters())
     param     = dict(model.named_parameters())
     for key in param_ema.keys():
         param_ema[key].data.mul_(decay).add_(param[key].data, alpha=(1 - decay))
+    if copy_buffers:
+        buffer_ema = dict(model_ema.named_buffers())
+        buffer     = dict(model.named_buffers())
+        for key in buffer_ema.keys():
+            buffer_ema[key].data.copy_(buffer[key].data)
     model.train()
