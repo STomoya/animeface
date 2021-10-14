@@ -411,7 +411,7 @@ class ConvAct(nn.Module):
             x, weight.to(x.dtype), self.down_filter,
             1, self.down, self.padding)
         b = self.bias.to(x.dtype) if self.bias is not None else self.bias
-        x = bias_act.bias_act(x, b, act=self.act_name)
+        x = bias_act.bias_act(x, b, act=self.act_name, gain=self.act_gain)
         return x
 
 class ResBlock(nn.Module):
