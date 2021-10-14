@@ -222,7 +222,7 @@ class SynthesisInput(nn.Module):
         B, device = w.size(0), w.device
 
         t = self.affine(w)
-        t = t / t[:, :2].norm(1, keepdim=True) # norm with translation params
+        t = t / t[:, :2].norm(dim=1, keepdim=True) # norm with translation params
         # rotation matrix
         m_r = torch.eye(3, device=device).unsqueeze(0).repeat(B, 1, 1)
         m_r[:, 0, 0] =   t[:, 0]
