@@ -54,7 +54,7 @@ def add_args(
             ele_type = type(default[0])
             parser.add_argument(option, default=default, type=ele_type, nargs='*', help=help)
         elif isinstance(value_type, type):
-            parser.add_argument(option, default=None, type=value_type, help=help)
+            parser.add_argument(option, default=None, type=default, help=help)
 
     return parser
 
