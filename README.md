@@ -1,5 +1,5 @@
 
-![StyleGAN3 samples](/docs/stylegan3-sample.jpg)
+![StyleGAN3 samples](/docs/stylegan3-samples.jpg)
 
 # animeface
 
