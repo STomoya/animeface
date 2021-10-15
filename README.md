@@ -1,7 +1,5 @@
 
-<p align="center">
-    <img alt="StyleGAN2 result" src="https://raw.githubusercontent.com/STomoya/animeface/master/implementations/StyleGAN2/result/118000.png">
-</p>
+![StyleGAN3 samples](/docs/stylegan3-sample.jpg)
 
 # animeface
 
@@ -28,6 +26,7 @@ deep models for anime images.
 
 |Method|paper|code|
 |------|-----|----|
+|Alias Free GAN (StyleGAN3)|[arxiv](https://arxiv.org/abs/2106.12423)|[github](https://github.com/NVlabs/stylegan3)|
 |Augmented-Self Reference and Dense Semantic Correspondence (SCFT)|[arxiv](https://arxiv.org/abs/2005.05207)|-|
 |auxiliary classifier GAN (ACGAN)|[arxiv](https://arxiv.org/abs/1610.09585)|-|
 |big GAN (BigGAN)|[arxiv](https://arxiv.org/abs/1809.11096)|[github](https://github.com/ajbrock/BigGAN-PyTorch)|
@@ -36,11 +35,13 @@ deep models for anime images.
 |deep convolutional GAN (DCGAN)|[arxiv](https://arxiv.org/abs/1511.06434)|-|
 |deep regret analytic GAN (DRAGAN)|[arxiv](https://arxiv.org/abs/1705.07215)|[github](https://github.com/kodalinaveen3/DRAGAN)|
 |Enhanced super resolution GAN (ESRGAN)|[arxiv](https://arxiv.org/abs/1809.00219)|[github](https://github.com/xinntao/ESRGAN)|
+|Fourier Features|[arxiv](https://arxiv.org/abs/2006.10739)|[github](https://github.com/tancik/fourier-feature-networks)|
 |GANILLA|[arxiv](https://arxiv.org/abs/2002.05638)|[github](https://github.com/giddyyupp/ganilla)|
 |generative adversarial networks (GAN)|[arxiv](https://arxiv.org/abs/1406.2661)|-|
 |Image-to-image Translation via Hierarchical Style Disentanglement (HiSD)|[arxiv](https://arxiv.org/abs/2103.01456)|[github](https://github.com/imlixinyang/HiSD)|
 |Improved Transformer for High-Resolution GANs (HiT)|[arxiv](https://arxiv.org/abs/2106.07631)|-|
 |Hologram(?) GAN (HoloGAN)|[arxiv](https://arxiv.org/abs/1904.01326)|[github](https://github.com/thunguyenphuoc/HoloGAN)
+|Position Encoding as Spatial Inductive Bias|[arxiv](https://arxiv.org/abs/2012.05217)|[github](https://github.com/open-mmlab/mmgeneration)|
 |progressive growing of GANs (PGGAN)|[arxiv](https://arxiv.org/abs/1710.10196)|[github](https://github.com/tkarras/progressive_growing_of_gans)|
 |pix2ix|[arxiv](https://arxiv.org/abs/1703.10593)|[github](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)|
 |pix2pix HD|[arxiv](https://arxiv.org/abs/1711.11585)|[github](https://github.com/NVIDIA/pix2pixHD)|
