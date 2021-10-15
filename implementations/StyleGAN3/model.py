@@ -310,7 +310,8 @@ class Synthesis(nn.Module):
     def __init__(self,
         image_size, num_layers=14, channels=32, max_channels=512, style_dim=512,
         image_channels=3, output_scale=0.25, margin_size=10,
-        first_cutoff=2, first_stopband=2**2.1, last_stopband_rel=2**0.3
+        first_cutoff=2, first_stopband=2**2.1, last_stopband_rel=2**0.3,
+        kernel_size=3
     ) -> None:
         super().__init__()
         self.num_ws = num_layers + 2 # +input+ToRGB
@@ -338,7 +339,7 @@ class Synthesis(nn.Module):
             is_critically_sampled = (i >= num_layers - 2)
             layers.append(
                 StyleLayer(
-                    int(channels[prev]), style_dim, int(channels[i]), 1 if is_rgb else 3,
+                    int(channels[prev]), style_dim, int(channels[i]), 1 if is_rgb else kernel_size,
                     int(sizes[prev]), int(sizes[i]), sampling_rates[prev], sampling_rates[i],
                     cutoffs[prev], cutoffs[i], half_widths[prev], half_widths[i],
                     is_rgb, is_critically_sampled))
@@ -362,7 +363,8 @@ class Generator(nn.Module):
         image_size, latent_dim, num_layers=14, map_num_layers=2,
         channels=32, max_channels=512, style_dim=512, pixel_norm=True,
         image_channels=3, output_scale=0.25, margin_size=10,
-        first_cutoff=2, first_stopband=2**2.1, last_stopband_rel=2**0.3
+        first_cutoff=2, first_stopband=2**2.1, last_stopband_rel=2**0.3,
+        kernel_size=3
     ) -> None:
         super().__init__()
         self.map = Mapping(
@@ -370,7 +372,7 @@ class Generator(nn.Module):
         self.synthesis = Synthesis(
             image_size, num_layers, channels, max_channels, style_dim,
             image_channels, output_scale, margin_size, first_cutoff,
-            first_stopband, last_stopband_rel)
+            first_stopband, last_stopband_rel, kernel_size)
 
     def forward(self, z, truncation_psi=1.):
         w = self.map(z, truncation_psi)

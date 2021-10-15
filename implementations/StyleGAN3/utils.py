@@ -110,6 +110,7 @@ def main(parser):
             channels          = [32, 'channel base'],
             max_channels      = [512, 'maximum channel width'],
             style_dim         = [512, 'style code dimension'],
+            kernel_size       = [3, 'kernel size. 3'],
             no_pixel_norm     = [False, 'no pixel normalization'],
             output_scale      = [0.25, 'scale output tensor with'],
             margin_size       = [10, 'bigger size to work on'],
@@ -157,13 +158,13 @@ def main(parser):
         args.map_num_layers, args.channels, args.max_channels,
         args.style_dim, not args.no_pixel_norm, args.image_channels,
         args.output_scale, args.margin_size, args.first_cutoff,
-        args.first_stopband, args.last_stopband_rel)
+        args.first_stopband, args.last_stopband_rel, args.kernel_size)
     G_ema = Generator(
         args.image_size, args.latent_dim, args.num_layers,
         args.map_num_layers, args.channels, args.max_channels,
         args.style_dim, not args.no_pixel_norm, args.image_channels,
         args.output_scale, args.margin_size, args.first_cutoff,
-        args.first_stopband, args.last_stopband_rel)
+        args.first_stopband, args.last_stopband_rel, args.kernel_size)
     freeze(G_ema)
     update_ema(G, G_ema, 0., copy_buffers=True)
     D = Discriminator(
