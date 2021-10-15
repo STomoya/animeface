@@ -6,7 +6,8 @@ from utils.argument import (
 )
 from utils.misc import (
     EasyDict,
-    gif_from_files
+    gif_from_files,
+    make_image_grid
 )
 
 def debug_mode():

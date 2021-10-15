@@ -27,7 +27,7 @@ class Status:
         self.batches_done = 0
         self.loss = None
         self.log_file = log_file
-        if os.path.exists(log_file):
+        if isinstance(log_file, str) and os.path.exists(log_file):
             self._write_to_log('', 'w')
         self.log_interval = log_interval
 
