@@ -6,6 +6,7 @@ from utils.argument import (
 )
 from utils.misc import (
     EasyDict,
+    print_for_repr,
     gif_from_files,
     make_image_grid
 )

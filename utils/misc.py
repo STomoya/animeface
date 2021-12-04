@@ -1,6 +1,9 @@
 
 from __future__ import annotations
+
+from functools import wraps
 from typing import Any
+
 import torch
 from PIL import Image
 
@@ -19,6 +22,64 @@ class EasyDict(dict):
 
     def __delattr__(self, name: str) -> None:
         del self[name]
+
+class print_for_repr:
+    '''
+    Decorator which prints positional and keyword arguments for reproduction
+
+    Usage:
+        @print_for_repr()
+        def method(a, b, c):
+            pass
+        method(10, 20, c=30)
+
+        >> Called: method(10, 20, c=30)
+
+        # or
+
+        class Net(nn.Module):
+            @print_for_repr()
+            def __init__(self, image_size, channels):
+                pass
+        Net(128, channels=32)
+
+        >> Called: Net(128, channels=32)
+
+        # use different printing function
+
+        import logging
+        logging.basicConfig(level=logging.DEBUG)
+        logger = logging.getLogger(__name__)
+        print_for_repr.print_func = logger.debug
+
+        method(10, 20, c=30)
+        >> DEBUG:__main__:Called: method(10, 20, c=30)
+        Net(128, channels=32)
+        >> DEBUG:__main__:Called: Net(128, channels=32)
+    '''
+    print_func = print
+
+    def __call__(self, func):
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+
+            if func.__name__ == '__init__':
+                name = args[0].__class__.__name__
+                print_args = args[1:]
+            else:
+                name = func.__name__
+                print_args = args
+
+            message = 'Called: {}({}{}{})'.format(
+                name,
+                ', '.join(map(str, print_args)),
+                ', ' if kwargs else '',
+                ', '.join(f'{key}={value}' for key, value in kwargs.items()))
+            self.print_func(message)
+            return func(*args, **kwargs)
+
+        return wrapper
 
 def gif_from_files(
     image_paths: list[str],
