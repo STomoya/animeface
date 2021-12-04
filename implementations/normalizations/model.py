@@ -1,3 +1,23 @@
+'''
+References
+
+AdaIN:
+    Xun Huang, Serge Belongie,
+    "Arbitrary Style Transfer in Real-time with Adaptive Instance Normalization",
+    https://arxiv.org/abs/1703.06868
+LIN, AdaLIN:
+    Junho Kim, Minjae Kim, Hyeonwoo Kang, Kwanghee Lee,
+    "U-GAT-IT: Unsupervised Generative Attentional Networks with Adaptive Layer-Instance Normalization for Image-to-Image Translation",
+    https://arxiv.org/abs/1907.10830
+PoLIN, AdaPoLIN:
+    Bing Li, Yuanlue Zhu, Yitong Wang, Chia-Wen Lin, Bernard Ghanem, Linlin Shen,
+    "AniGAN: Style-Guided Generative Adversarial Networks for Unsupervised Anime Face Generation",
+    https://arxiv.org/abs/2102.12593
+PONO:
+    Boyi Li, Felix Wu, Kilian Q. Weinberger, Serge Belongie,
+    "Positional Normalization",
+    https://arxiv.org/abs/1907.04312
+'''
 
 import math
 
