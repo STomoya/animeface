@@ -1,0 +1,24 @@
+{
+  "name": "normalizations",
+  "image_size": 128,
+  "batch_size": 32,
+  "dataset": "animeface",
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "disable_gpu": false,
+  "disable_amp": false,
+  "debug": false,
+  "num_test": 4,
+  "norm_name": "lin",
+  "lr": 0.0002,
+  "betas": [
+    0.5,
+    0.999
+  ],
+  "style_lambda": 10.0,
+  "content_lambda": 0.0,
+  "recon_lambda": 5.0
+}
