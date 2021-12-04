@@ -23,6 +23,8 @@ def get_default_parser() -> ArgumentParser:
     default_args.default_epochs = [100, 'Used to calculate the max iteration if --max-iters < 0']
     default_args.disable_gpu    = [False, 'Disable GPU']
     default_args.disable_amp    = [False, 'Disable AMP']
+    default_args.log_file       = [str, 'Filename for saving log output']
+    default_args.log_interval   = [1, 'Interval for logging to log file']
     default_args.debug          = [False, 'Debug mode']
 
     parser = add_args(parser, default_args)
@@ -31,10 +33,12 @@ def get_default_parser() -> ArgumentParser:
 def add_args(
     parser: ArgumentParser,
     arg_defaults: dict,
-    prefix: str='--'
+    prefix: str='--',
+    under_score: bool=False
 ) -> ArgumentParser:
     for k, v in arg_defaults.items():
-        option = prefix + k.replace('_', '-')
+        if not under_score:
+            option = prefix + k.replace('_', '-')
 
         if len(v) == 1:
             default, help = v[0], ''
