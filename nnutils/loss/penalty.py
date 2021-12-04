@@ -25,13 +25,19 @@ def calc_grad(
             gradients = gradients / scaler.get_scale()
     return gradients
 
-class gradient_penalty(Loss):
+class Penalty(Loss):
+    def __init__(self, return_all: bool = False) -> None:
+        super().__init__(return_all=return_all)
+        self.filter_output = lambda x: x
+
+class gradient_penalty(Penalty):
     def __call__(self,
         real: torch.Tensor,
         fake: torch.Tensor,
         D: nn.Module,
         scaler: Optional[GradScaler]=None,
-        center: float=1.
+        center: float=1.,
+        d_aux_input: tuple=tuple()
     ) -> torch.Tensor:
 
         assert center in [1., 0.]
@@ -42,7 +48,7 @@ class gradient_penalty(Loss):
         x_hat = real * alpha + fake * (1 - alpha)
         x_hat = Variable(x_hat, requires_grad=True)
 
-        d_x_hat = D(x_hat)
+        d_x_hat = self.filter_output(D(x_hat, *d_aux_input))
 
         gradients = calc_grad(d_x_hat, x_hat, scaler)
 
@@ -51,12 +57,13 @@ class gradient_penalty(Loss):
 
         return penalty
 
-class dragan_penalty(Loss):
+class dragan_penalty(Penalty):
     def __call__(self,
         real: torch.Tensor,
         D: nn.Module,
         scaler: Optional[GradScaler]=None,
-        center: float=1.
+        center: float=1.,
+        d_aux_input: tuple=tuple()
     ) -> torch.Tensor:
 
         device = real.device
@@ -66,7 +73,7 @@ class dragan_penalty(Loss):
         x_hat = real * alpha + (1 - alpha) * (real + 0.5 * real.std() * beta)
         x_hat = Variable(x_hat, requires_grad=True)
 
-        d_x_hat = D(x_hat)
+        d_x_hat = self.filter_output(D(x_hat, *d_aux_input))
 
         gradients = calc_grad(d_x_hat, x_hat, scaler)
 
@@ -75,14 +82,16 @@ class dragan_penalty(Loss):
 
         return penalty
 
-class r1_regularizer(Loss):
+class r1_regularizer(Penalty):
     def __call__(self,
         real: torch.Tensor,
         D: nn.Module,
-        scaler: Optional[GradScaler]=None
+        scaler: Optional[GradScaler]=None,
+        d_aux_input: tuple=tuple()
     ) -> torch.Tensor:
         real_loc = Variable(real, requires_grad=True)
-        d_real_loc = D(real_loc)
+
+        d_real_loc = self.filter_output(D(real_loc, *d_aux_input))
 
         gradients = calc_grad(d_real_loc, real_loc, scaler)
 
@@ -95,6 +104,7 @@ class r2_regularizer(r1_regularizer):
     def __call__(self,
         fake: torch.Tensor,
         D: nn.Module,
-        scaler: Optional[GradScaler]
+        scaler: Optional[GradScaler],
+        d_aux_input: tuple=tuple()
     ) -> torch.Tensor:
-        return super().__call__(fake, D, scaler=scaler)
+        return super().__call__(fake, D, scaler, d_aux_input)
