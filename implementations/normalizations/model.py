@@ -13,10 +13,6 @@ PoLIN, AdaPoLIN:
     Bing Li, Yuanlue Zhu, Yitong Wang, Chia-Wen Lin, Bernard Ghanem, Linlin Shen,
     "AniGAN: Style-Guided Generative Adversarial Networks for Unsupervised Anime Face Generation",
     https://arxiv.org/abs/2102.12593
-PONO:
-    Boyi Li, Felix Wu, Kilian Q. Weinberger, Serge Belongie,
-    "Positional Normalization",
-    https://arxiv.org/abs/1907.04312
 '''
 
 import math
@@ -82,33 +78,12 @@ class PoLIN(nn.Module):
             out = self.gamma * out + self.beta
         return out
 
-class PONO(nn.Module):
-    def __init__(self,
-        size, affine=True, eps=1e-5
-    ) -> None:
-        super().__init__()
-        self._size = size
-        self._affine = affine
-        self.eps = eps
-        if affine:
-            self.gamma = nn.Parameter(torch.ones(1, 1, *size))
-            self.beta  = nn.Parameter(torch.zeros(1, 1, *size))
-
-    def forward(self, x):
-        mean = x.mean(dim=1, keepdims=True)
-        std  = x.std(dim=1, keepdims=True) + self.eps
-        out = (x - mean) / std
-        if self._affine:
-            out = self.gamma * out + self.beta
-        return out
-
 def get_normalization(name, CHW, affine=True):
     if   name == 'bn': return nn.BatchNorm2d(CHW[0], affine)
     elif name == 'in': return nn.InstanceNorm2d(CHW[0], affine)
     elif name == 'ln': return nn.LayerNorm(CHW, affine)
     elif name == 'lin': return LIN(CHW[0], affine)
     elif name == 'polin': return PoLIN(CHW[0], affine)
-    elif name == 'pono': return PONO(CHW[1:], affine)
     raise Exception(f'Normalization: {name}')
 
 class AdaptiveNormalization(nn.Module):
