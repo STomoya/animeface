@@ -46,31 +46,31 @@ class MiniAcceleratedOptimizer(optim.Optimizer):
             self._optimizer.step(closure)
     @property
     def param_groups(self):
-        return self.optimizer.param_groups
+        return self._optimizer.param_groups
     @param_groups.setter
     def param_groups(self, param_groups):
-        self.optimizer.param_groups = param_groups
+        self._optimizer.param_groups = param_groups
 
     @property
     def defaults(self):
-        return self.optimizer.defaults
+        return self._optimizer.defaults
     @defaults.setter
     def defaults(self, defaults):
-        self.optimizer.defaults = defaults
+        self._optimizer.defaults = defaults
 
     def add_param_group(self, param_group):
-        self.optimizer.add_param_group(param_group)
+        self._optimizer.add_param_group(param_group)
 
     def load_state_dict(self, state_dict):
-        self.optimizer.load_state_dict(state_dict)
+        self._optimizer.load_state_dict(state_dict)
 
     def state_dict(self):
-        return self.optimizer.state_dict()
+        return self._optimizer.state_dict()
 
     def zero_grad(self, set_to_none=None):
         if set_to_none is None:
             set_to_none = False
-        self.optimizer.zero_grad(set_to_none=set_to_none)
+        self._optimizer.zero_grad(set_to_none=set_to_none)
 
 def is_tensor(data):
     '''check if data is torch.Tensor object'''
@@ -196,7 +196,7 @@ class MiniAccelerator:
 
     def prepare(self, *args):
         '''prepare nn.Module, DataLoader, optim.Optimizer'''
-        if len(args):
+        if len(args) == 0:
             return
         prepared = []
         for arg in args:
