@@ -202,7 +202,7 @@ class Synthesis(nn.Module):
         self.style_layers = nn.ModuleList([])
         self.to_rgbs      = nn.ModuleList([])
 
-        for _ in range(num_layers):
+        for _ in range(num_layers//2):
             channels //= 2
             ichannels, ochannels = ochannels, min(max_channels, channels)
             self.style_layers.append(StyleLayer(ichannels, style_dim, ochannels))
