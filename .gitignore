@@ -1,5 +1,7 @@
 
+# pickled models
 *.pt
+*.pth
 
 # Created by https://www.gitignore.io/api/osx,linux,macos,python,windows,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=osx,linux,macos,python,windows,visualstudiocode
