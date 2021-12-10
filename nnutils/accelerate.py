@@ -22,10 +22,11 @@ from contextlib import contextmanager
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader, IterableDataset
 from torch.cuda.amp import autocast, GradScaler
 
 from nnutils import get_device
+from utils import EasyDict
 
 class MiniAcceleratedOptimizer(optim.Optimizer):
     '''Optimizer wrapper'''
@@ -95,7 +96,7 @@ def recursive_apply(func, data, test_type=is_tensor):
         return func(data)
     return data
 
-class DataLoaderWrapper:
+class DataLoaderWrapper(DataLoader):
     '''Wrapper for dataloader
     send batch to device
 
@@ -106,25 +107,30 @@ class DataLoaderWrapper:
             device to send the data to
     '''
     def __init__(self,
-        dataloader: DataLoader,
-        device
+        dataset: Dataset,
+        device,
+        **kwargs
     ) -> None:
-        self._dataloader = dataloader
-        self._dataloader_iter = iter(self._dataloader)
+        super().__init__(dataset, **kwargs)
         self._device = device
         self._to_device = lambda tensor: tensor.to(self._device)
 
     def __iter__(self):
-        return self
+        for batch in super().__iter__():
+            if self._device is not None:
+                batch = recursive_apply(self._to_device, batch)
+            yield batch
 
-    def __next__(self):
-        try:
-            batch = next(self._dataloader_iter)
-            batch = recursive_apply(self._to_device, batch)
-            return batch
-        except StopIteration as si:
-            self._dataloader_iter = iter(self._dataloader)
-            raise
+    @classmethod
+    def from_dataloader(cls,
+        dataloader: DataLoader, device
+    ) -> DataLoaderWrapper:
+        dataset = dataloader.dataset
+        kwargs = EasyDict()
+        kwargs.batch_sampler = dataloader.batch_sampler
+        kwargs.num_workers   = dataloader.num_workers
+        kwargs.pin_memory    = dataloader.pin_memory
+        return cls(dataset, device, **kwargs)
 
 class MiniAccelerator:
     '''
@@ -231,7 +237,7 @@ class MiniAccelerator:
     ) -> DataLoader | DataLoaderWrapper:
         '''prepare dataloader'''
         if self._device_placement:
-            dataloader = DataLoaderWrapper(
+            dataloader = DataLoaderWrapper.from_dataloader(
                 dataloader, self._device)
         return dataloader
 
