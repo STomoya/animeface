@@ -17,6 +17,7 @@ services:
       - /mnt/D/Data/danbooru:/usr/src/data/danbooru
       - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
       - /mnt/D/Data/celeba:/usr/src/data/celeba
+      - /mnt/D/Data/aahq/aligned:/usr/src/data/aahq
     working_dir: /usr/src
     tty: true
     shm_size: '8gb'
