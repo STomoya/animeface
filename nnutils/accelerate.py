@@ -25,7 +25,6 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, IterableDataset
 from torch.cuda.amp import autocast, GradScaler
 
-from nnutils import get_device
 from utils import EasyDict
 
 class MiniAcceleratedOptimizer(optim.Optimizer):
@@ -170,7 +169,8 @@ class MiniAccelerator:
     ) -> None:
         self._amp = amp
         self._device_placement = device_placement
-        self._device = device if device is not None else get_device()
+        self._device = device if device is not None \
+            else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self._scaler = GradScaler() if amp else None
 
     @property

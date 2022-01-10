@@ -52,7 +52,7 @@ class WrappedDataset(Dataset):
     ):
         dataset = cls(*cls_args, **cls_kwargs)
         return DataLoader(
-            dataset, batch_size, shuffle,
+            dataset, batch_size, shuffle, drop_last=True,
             num_workers=num_workers, pin_memory=pin_memory)
 
 class Image(WrappedDataset):

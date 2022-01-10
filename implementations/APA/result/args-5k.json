@@ -1,0 +1,31 @@
+{
+  "name": "APA",
+  "image_size": 128,
+  "batch_size": 64,
+  "dataset": "danbooru",
+  "min_year": 2005,
+  "num_images": 4992,
+  "save": 1000,
+  "max_iters": 300000,
+  "default_epochs": 100,
+  "disable_gpu": false,
+  "disable_amp": false,
+  "log_file": "log.log",
+  "log_interval": 10,
+  "debug": false,
+  "num_test": 16,
+  "latent_dim": 512,
+  "apa_interval": 4,
+  "apa_target_kimg": 500,
+  "apa_threshold": 0.6,
+  "disable_apa": false,
+  "lr": 0.0025,
+  "map_lr_scale": 0.01,
+  "betas": [
+    0.0,
+    0.99
+  ],
+  "gp_lambda": 10.0,
+  "gp_every": 16,
+  "policy": "color,translation"
+}
