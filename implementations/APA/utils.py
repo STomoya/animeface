@@ -65,7 +65,7 @@ def train(args,
                 gp_loss = 0
                 if status.batches_done % gp_every == 0:
                     gp_loss = gp_fn(real_aug_apa.detach(), D, accelerator.scaler) \
-                        + gp_lambda
+                        * gp_lambda
                 D_loss = adv_loss + gp_loss
 
             '''APA'''
@@ -100,8 +100,7 @@ def train(args,
                 fake, 'running.jpg', nrow=int(fake.size(0)**0.5),
                 normalize=True, value_range=(-1, 1))
 
-            status.print(str(apa_augment.p) + f', {apa_augment._p_delta}')
-            status.update(G=G_loss.item(), D=D_loss.item())
+            status.update(G=G_loss.item(), D=D_loss.item(), p=apa_augment.p.item())
             accelerator.update()
 
             if status.is_end():
