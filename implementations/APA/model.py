@@ -84,7 +84,7 @@ class APA(nn.Module):
             if use_fake:
                 # -E[sign(D(G(z)))]
                 # add to signmean for lambda_rf
-                signmean = signmean + self.fake_signsum / (self._batch_size * self._interval)
+                signmean = signmean - self.fake_signsum / (self._batch_size * self._interval)
             if all([use_real, use_fake]):
                 signmean = signmean / 2
 
@@ -94,6 +94,9 @@ class APA(nn.Module):
             self.p.copy_(self.p + adjust).clamp_(0., 1.)
 
             self._current_iter = 0
+            # print(self.real_signsum.item(), self.fake_signsum.item(), (signmean-self._threshold).item(), self.p.item())
+            self.real_signsum.fill_(0.)
+            self.fake_signsum.fill_(0.)
 
     def forward(self, real, fake):
 
