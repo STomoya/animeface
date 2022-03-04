@@ -8,10 +8,10 @@ import torch
 # from torch_utils.ops import upfirdn2d
 # from torch_utils.ops import grid_sample_gradfix
 # from torch_utils.ops import conv2d_gradfix
-from thirdparty.stylegan2_ops import misc
-from thirdparty.stylegan2_ops.ops import upfirdn2d
-from thirdparty.stylegan2_ops.ops import grid_sample_gradfix
-from thirdparty.stylegan2_ops.ops import conv2d_gradfix
+from thirdparty.stylegan3_ops import misc
+from thirdparty.stylegan3_ops.ops import upfirdn2d
+from thirdparty.stylegan3_ops.ops import grid_sample_gradfix
+from thirdparty.stylegan3_ops.ops import conv2d_gradfix
 
 #----------------------------------------------------------------------------
 # Coefficients of various wavelet decomposition low-pass filters.
