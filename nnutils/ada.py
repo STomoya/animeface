@@ -20,6 +20,7 @@ class ADA(AugmentPipe):
         self._num_iter = 0
 
         self.register_buffer('signsum', torch.zeros([]))
+        self.p.copy_(torch.zeros([]))
 
     @torch.no_grad()
     def update_p(self, prob: torch.Tensor):
