@@ -1,0 +1,38 @@
+{
+  "name": "LKA",
+  "image_size": 128,
+  "batch_size": 16,
+  "dataset": "animeface",
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "disable_gpu": false,
+  "disable_amp": false,
+  "log_file": "lka.log",
+  "log_interval": 10,
+  "debug": false,
+  "num_test": 16,
+  "image_channels": 3,
+  "latent_dim": 128,
+  "bottom": 4,
+  "channels": 64,
+  "max_channels": null,
+  "blocks_per_scale": 2,
+  "norm_name": "ln",
+  "act_name": "gelu",
+  "layers": [
+    3,
+    3,
+    9,
+    3
+  ],
+  "lr": 0.0001,
+  "betas": [
+    0.5,
+    0.99
+  ],
+  "ttur": false,
+  "gp_lambda": 10.0
+}
