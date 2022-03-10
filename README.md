@@ -3,7 +3,7 @@
 
 # animeface
 
-deep models for anime images.
+Deep models for anime images.
 
 ## Datasets
 
@@ -26,15 +26,18 @@ deep models for anime images.
 
 |Method|paper|code|
 |------|-----|----|
+|Adaptive Pseudo Augmentation (APA)|[arxiv](https://arxiv.org/abs/2111.06849)|[github](https://github.com/EndlessSora/DeceiveD)|
 |Alias Free GAN (StyleGAN3)|[arxiv](https://arxiv.org/abs/2106.12423)|[github](https://github.com/NVlabs/stylegan3)|
 |Augmented-Self Reference and Dense Semantic Correspondence (SCFT)|[arxiv](https://arxiv.org/abs/2005.05207)|-|
 |auxiliary classifier GAN (ACGAN)|[arxiv](https://arxiv.org/abs/1610.09585)|-|
 |big GAN (BigGAN)|[arxiv](https://arxiv.org/abs/1809.11096)|[github](https://github.com/ajbrock/BigGAN-PyTorch)|
 |conditional GAN (cGAN)|[arxiv](https://arxiv.org/abs/1411.1784)|-|
-|Contrastive Discriminator (ContraD)|[openreview](https://openreview.net/forum?id=eo6U4CAwVmg)|[github](https://github.com/jh-jeong/ContraD)
+|Contrastive Discriminator (ContraD)|[openreview](https://openreview.net/forum?id=eo6U4CAwVmg)|[github](https://github.com/jh-jeong/ContraD)|
+|ConvNeXt|[arxiv](https://arxiv.org/abs/2201.03545)|[github](https://github.com/facebookresearch/ConvNeXt)|
 |deep convolutional GAN (DCGAN)|[arxiv](https://arxiv.org/abs/1511.06434)|-|
 |deep regret analytic GAN (DRAGAN)|[arxiv](https://arxiv.org/abs/1705.07215)|[github](https://github.com/kodalinaveen3/DRAGAN)|
 |Enhanced super resolution GAN (ESRGAN)|[arxiv](https://arxiv.org/abs/1809.00219)|[github](https://github.com/xinntao/ESRGAN)|
+|FastGAN|[arxiv](https://arxiv.org/abs/2101.04775)|[github](https://github.com/odegeasslbc/FastGAN-pytorch)|
 |Fourier Features|[arxiv](https://arxiv.org/abs/2006.10739)|[github](https://github.com/tancik/fourier-feature-networks)|
 |GANILLA|[arxiv](https://arxiv.org/abs/2002.05638)|[github](https://github.com/giddyyupp/ganilla)|
 |generative adversarial networks (GAN)|[arxiv](https://arxiv.org/abs/1406.2661)|-|
@@ -52,6 +55,7 @@ deep models for anime images.
 |Super resolution GAN (SRGAN)|[arxiv](https://arxiv.org/abs/1609.04802)|-|
 |Transformer-based GAN (TransGAN)|[arxiv](https://arxiv.org/abs/2102.07074)|[github](https://github.com/VITA-Group/TransGAN)|
 |unsupervised GAN with adaptive layer-instance normalization (UGATIT)|[arxiv](https://arxiv.org/abs/1907.10830)|[github](https://github.com/taki0112/UGATIT)|
+|Visual Attention Network (VAN)|[arxiv](https://arxiv.org/abs/2202.09741)|[github](https://github.com/Visual-Attention-Network/VAN-Classification)|
 |Wasserstein GAN (WGAN)|[arxiv](https://arxiv.org/abs/1701.07875)|-|
 |WGAN with gradient penalty (WGAN_gp)|[arxiv](https://arxiv.org/abs/1704.00028)|-|
 |zero-centered gradient penalty|[arxiv](https://arxiv.org/abs/1705.09367)|-|
