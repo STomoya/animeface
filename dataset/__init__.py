@@ -21,6 +21,11 @@ from dataset.danbooru import (
     DanbooruAutoPair
 )
 
+from dataset.aahq import (
+    AAHQ,
+    AAHQCelebA
+)
+
 import os
 import torch
 from torch.utils.data import DataLoader, Dataset
