@@ -1,8 +1,12 @@
 
+from __future__ import annotations
+
 import glob
 import random
 
 from collections.abc import Callable
+from typing import Optional
+
 from dataset._base import (
     Image, ImageImage, LRHR,
     make_default_transform)
@@ -24,6 +28,26 @@ class AAHQ(Image):
             random.shuffle(images)
             images = images[:self.num_images]
         return images
+
+class AAHQSR(LRHR):
+    def __init__(self,
+        image_size: int,
+        scale: float=2,
+        resize_scale: float=1.,
+        num_images: int=None,
+        transform: Optional[Callable]=None
+    ) -> None:
+        self.num_images = num_images
+        super().__init__(image_size, scale, resize_scale)
+        if callable(transform):
+            self.transform = transform
+
+    def _load(self) -> list[str]:
+        image_paths = glob.glob('/usr/src/data/aahq/*')
+        if self.num_images is not None and 0 < self.num_images < len(image_paths):
+            random.shuffle(image_paths)
+            image_paths = image_paths[:self.num_images]
+        return image_paths
 
 class AAHQCelebA(ImageImage):
     def __init__(self,
