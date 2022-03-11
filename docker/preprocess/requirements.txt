@@ -1,7 +1,12 @@
+# illustration2vec requirements
 chainer
 illustration2vec
+# image
 scikit-image
-tqdm
-joblib
 opencv-python
+# visualization
+tqdm
+# MP
+joblib
+# math
 scipy
