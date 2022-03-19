@@ -1,4 +1,4 @@
-version: '2.3'
+version: '3'
 
 services:
   python:
@@ -10,7 +10,6 @@ services:
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - .:/usr/src
       - /mnt/D/Data/animefacedataset:/usr/src/data/animefacedataset

@@ -1,10 +1,17 @@
+# ML
 scikit-learn
+# visualization
 matplotlib
 tqdm
-scipy
-kornia
-opencv-python
-opt_einsum
 loguru
 rich
+# math
+scipy
+# image
+scikit-image
+opencv-python
+# tensor ops
+opt_einsum
+einops
+# cpp extension
 ninja
