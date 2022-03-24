@@ -1,351 +1,295 @@
 
+import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-'''
-layers
-'''
 
-class Conv2d(nn.Module):
-    def __init__(self,
-        in_channels, out_channels, kernel_size, **kwargs
-    ):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size, **kwargs
-        )
-        self.conv.weight.data.normal_(0., 1.)
-        if not self.conv.bias == None:
-            self.conv.bias.data.fill_(0.)
-    def forward(self, x):
-        x = self.conv(x)
-        return x
+def get_activation(name):
+    if name == 'relu': return nn.ReLU(True)
+    elif name == 'lrelu': return nn.LeakyReLU(0.2, True)
+    elif name == 'gelu':  return nn.GELU()
+    elif name in ['swish', 'silu']: return nn.SiLU()
+    raise Exception(f'Activation: {name}')
 
-class SNConv2d(nn.Module):
-    def __init__(self,
-        in_channels, out_channels, kernel_size, **kwargs
-    ):
-        super().__init__()
-        conv = nn.Conv2d(in_channels, out_channels, kernel_size, **kwargs)
-        conv.weight.data.normal_(0., 1.)
-        if conv.bias.data == None:
-            conv.bias.data.fill_(0.)
-        self.conv = nn.utils.spectral_norm(conv)
-    def forward(self, x):
-        x = self.conv(x)
-        return x
 
-class Linear(nn.Module):
-    def __init__(self,
-        in_features, out_features, **kwargs
-    ):
-        super().__init__()
-        self.linear = nn.Linear(
-            in_features, out_features, **kwargs
-        )
-        self.linear.weight.data.normal_(0., 1.)
-    def forward(self, x):
-        x = self.linear(x)
-        return x
+def get_normalization(name, channels, **kwargs):
+    if name == 'bn': return nn.BatchNorm2d(channels, **kwargs)
+    elif name == 'in': return nn.InstanceNorm2d(channels, **kwargs)
+    elif name == 'ln': return nn.GroupNorm(1, channels, **kwargs)
+    elif name == 'gn': return nn.GroupNorm(16, channels, **kwargs)
+    raise Exception(f'Normalization: {name}')
 
-class ILN(nn.Module):
-    def __init__(self,
-        channels, resl, eps=1.e-8
-    ):
-        super().__init__()
-        
-        self.rho = nn.Parameter(torch.Tensor(1, channels, 1, 1))
-        self.rho.data.fill_(0.)
 
-        self.instance_norm = nn.InstanceNorm2d(channels, eps=eps, affine=False)
-        self.layer_norm    = nn.LayerNorm((channels, resl, resl), eps=eps, elementwise_affine=False)
+# def SNConv2d(*args, **kwargs):
+#     return nn.utils.spectral_norm(nn.Conv2d(*args, **kwargs))
+def SNConv2d(*args, **kwargs):
+    return nn.Conv2d(*args, **kwargs)
 
-        self.gamma = nn.Parameter(torch.Tensor(1, channels, 1, 1))
-        self.beta  = nn.Parameter(torch.Tensor(1, channels, 1, 1))
-        self.gamma.data.fill_(1.)
-        self.beta.data.fill_(0.)
-
-    def forward(self, x):
-        i_norm = self.instance_norm(x)
-        l_norm = self.layer_norm(x)
-        out = i_norm * self.rho.expand(x.size(0), -1, -1, -1) + l_norm * (1 - self.rho.expand(x.size(0), -1, -1, -1))
-        out = out * self.gamma.expand(x.size(0), -1, -1, -1) + self.beta.expand(x.size(0), -1, -1, -1)
-        return out
-
-class AdaILN(nn.Module):
-    def __init__(self,
-        channels, resl, eps=1.e-8
-    ):
-        super().__init__()
-        
-        self.rho = nn.Parameter(torch.Tensor(1, channels, 1, 1))
-        self.rho.data.fill_(1.)
-
-        self.instance_norm = nn.InstanceNorm2d(channels, eps=eps, affine=False)
-        self.layer_norm    = nn.LayerNorm((channels, resl, resl), eps=eps, elementwise_affine=False)
-
-    def forward(self, x, gamma, beta):
-        i_norm = self.instance_norm(x)
-        l_norm = self.layer_norm(x)
-        out = i_norm * self.rho.expand(x.size(0), -1, -1, -1) + l_norm * (1 - self.rho.expand(x.size(0), -1, -1, -1))
-        out = out * gamma.view(out.size(0), -1, 1, 1) + beta.view(out.size(0), -1, 1, 1)
-        return out
 
 class CAM(nn.Module):
-    def __init__(self,
-        channels
-    ):
+    def __init__(self, channels, act_name='relu', sn=False) -> None:
         super().__init__()
-
-        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.global_max_pool = nn.AdaptiveMaxPool2d((1, 1))
-
-        self.global_avg_pool_fc = Linear(channels, 1, bias=False)
-        self.global_max_pool_fc = Linear(channels, 1, bias=False)
-
-        self.conv = Conv2d(channels*2, channels, 1, bias=True)
+        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.maxpool = nn.AdaptiveMaxPool2d(1)
+        self.avgpool_fc = nn.Linear(channels, 1, bias=False)
+        self.maxpool_fc = nn.Linear(channels, 1, bias=False)
+        conv_cls = SNConv2d if sn else nn.Conv2d
+        self.conv = conv_cls(channels*2, channels, 1, bias=False)
+        self.act  = get_activation(act_name)
 
     def forward(self, x):
+        gap = self.avgpool(x)
+        gap_logit = self.avgpool_fc(gap.flatten(1))
+        gap_weight = self.avgpool_fc.weight.clone()
+        gap = x * gap_weight[:, :, None, None]
 
-        gap = self.global_avg_pool(x)
-        gap_logit = self.global_avg_pool_fc(gap.view(x.size(0), -1))
-        gap_weight = self.global_avg_pool_fc.linear.weight.data.clone()
-        gap = x * gap_weight.unsqueeze(2).unsqueeze(3)
+        gmp = self.maxpool(x)
+        gmp_logit = self.maxpool_fc(gmp.flatten(1))
+        gmp_weight = self.maxpool_fc.weight.detach().clone()
+        gmp = x * gmp_weight[:, :, None, None]
 
-        gmp = self.global_max_pool(x)
-        gmp_logit = self.global_max_pool_fc(gmp.view(x.size(0), -1))
-        gmp_weight = self.global_max_pool_fc.linear.weight.data.clone()
-        gmp = x * gmp_weight.unsqueeze(2).unsqueeze(3)
+        cam_logit = torch.cat([gap_logit, gmp_logit], dim=1)
+        x = torch.cat([gap, gmp], dim=1)
+        x = self.conv(x)
+        x = self.act(x)
 
-        cam_logit = torch.cat([gap, gmp], dim=1)
-        x = self.conv(cam_logit)
-        return x, cam_logit
+        heatmap = torch.sum(x, dim=1, keepdim=True)
+
+        return x, cam_logit, heatmap
+
 
 class GammaBeta(nn.Module):
     def __init__(self,
-        channels, resl
-    ):
+        in_features, out_features, act_name='relu'
+    ) -> None:
         super().__init__()
 
-        self.fc = nn.Sequential(
-            Linear(channels*resl*resl, channels, bias=False),
-            nn.ReLU(),
-            Linear(channels, channels, bias=False),
-            nn.ReLU()
-        )
-        self.gamma = Linear(channels, channels, bias=False)
-        self.beta  = Linear(channels, channels, bias=False)
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features, out_features, bias=False),
+            get_activation(act_name),
+            nn.Linear(out_features, out_features*2, bias=False))
 
     def forward(self, x):
-        x = self.fc(x.view(x.size(0), -1))
-        gamma = self.gamma(x)
-        beta = self.beta(x)
+        x = self.mlp(x)
+        gamma, beta = x.chunk(2, dim=1)
         return gamma, beta
 
-'''
-blocks
-'''
 
-
-class DownsampleBlock(nn.Module):
-    def __init__(self,
-        channels,
-    ):
+class LIN(nn.Module):
+    def __init__(self, channels, affine=True) -> None:
         super().__init__()
-
-        self.block = nn.Sequential(
-            nn.ReflectionPad2d(3),
-            Conv2d(3, channels, 7, bias=False),
-            nn.InstanceNorm2d(channels),
-            nn.ReLU(),
-            nn.ReflectionPad2d(1),
-            Conv2d(channels, channels*2, 3, stride=2, bias=False),
-            nn.InstanceNorm2d(channels*2),
-            nn.ReLU(),
-            nn.ReflectionPad2d(1),
-            Conv2d(channels*2, channels*4, 3, stride=2, bias=False),
-            nn.InstanceNorm2d(channels*2),
-            nn.ReLU()
-        )
+        self.layer_norm = get_normalization('ln', channels, affine=False)
+        self.instance_norm = get_normalization('in', channels, affine=False)
+        self.rho   = nn.Parameter(torch.ones(1, channels, 1, 1) * 0.5)
+        if affine:
+            self.affine = True
+            self.gamma = nn.Parameter(torch.ones(1, channels, 1, 1))
+            self.beta  = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        else: self.affine = False
 
     def forward(self, x):
-        x = self.block(x)
+        layer_norm = self.layer_norm(x)
+        instance_norm = self.instance_norm(x)
+        x = self.rho * instance_norm + (1 - self.rho) * layer_norm
+        if self.affine:
+            x = self.gamma * x + self.beta
         return x
 
-class UpsampleBlock(nn.Module):
-    def __init__(self,
-        channels, resl,
-        upscale_mode='nearest'
-    ):
-        super().__init__()
 
-        self.block = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode=upscale_mode),
-            nn.ReflectionPad2d(1),
-            Conv2d(channels, channels//2, 3, bias=False),
-            ILN(channels//2, resl*2),
-            nn.ReLU(),
-            nn.Upsample(scale_factor=2, mode=upscale_mode),
-            nn.ReflectionPad2d(1),
-            Conv2d(channels//2, channels//4, 3, bias=False),
-            ILN(channels//4, resl*4),
-            nn.ReLU(),
-            nn.ReflectionPad2d(3),
-            Conv2d(channels//4, 3, 7, bias=False),
-            nn.Tanh()
-        )
-    
-    def forward(self, x):
-        x = self.block(x)
+class AdaLIN(nn.Module):
+    def __init__(self, channels) -> None:
+        super().__init__()
+        self.lin = LIN(channels, affine=False)
+    def forward(self, x, gamma, beta):
+        x = self.lin(x)
+        x = gamma[:, :, None, None] * x + beta[:, :, None, None]
         return x
 
-class ResnetBlock(nn.Module):
-    def __init__(self,
-        channels, bias
-    ):
-        super().__init__()
 
-        self.block = nn.Sequential(
-            nn.ReflectionPad2d(1),
-            Conv2d(channels, channels, 3, bias=bias),
-            nn.InstanceNorm2d(channels),
-            nn.ReLU(),
-            nn.ReflectionPad2d(1),
-            Conv2d(channels, channels, 3, bias=bias),
-            nn.InstanceNorm2d(channels)
-        )
+class ResBlock(nn.Module):
+    def __init__(self,
+        channels, norm_name='in', act_name='relu'
+    ) -> None:
+        super().__init__()
+        self.pad = nn.ReflectionPad2d(1)
+        self.conv1 = nn.Conv2d(channels, channels, 3, bias=False)
+        self.norm1 = get_normalization(norm_name, channels)
+        self.act   = get_activation(act_name)
+        self.conv2 = nn.Conv2d(channels, channels, 3, bias=False)
+        self.norm2 = get_normalization(norm_name, channels)
+
     def forward(self, x):
-        x = x + self.block(x)
-        return F.relu(x)
+        skip = x
+        x = self.conv1(self.pad(x))
+        x = self.norm1(x)
+        x = self.act(x)
+        x = self.conv2(self.pad(x))
+        x = self.norm2(x)
+        return skip + x
 
-class ResnetAdaILNBlock(nn.Module):
+
+class AdaLINResBlock(nn.Module):
     def __init__(self,
-        channels, resl, bias
-    ):
+        channels, act_name='relu'
+    ) -> None:
         super().__init__()
-
-        self.pad0  = nn.ReflectionPad2d(1)
-        self.conv0 = Conv2d(channels, channels, 3, bias=bias)
-        self.norm0 = AdaILN(channels, resl)
-        self.pad1  = nn.ReflectionPad2d(1)
-        self.conv1 = Conv2d(channels, channels, 3, bias=bias)
-        self.norm1 = AdaILN(channels, resl)
+        self.pad = nn.ReflectionPad2d(1)
+        self.conv1 = nn.Conv2d(channels, channels, 3, bias=False)
+        self.norm1 = AdaLIN(channels)
+        self.act   = get_activation(act_name)
+        self.conv2 = nn.Conv2d(channels, channels, 3, bias=False)
+        self.norm2 = AdaLIN(channels)
 
     def forward(self, x, gamma, beta):
+        skip = x
+        x = self.conv1(self.pad(x))
+        x = self.norm1(x, gamma, beta)
+        x = self.act(x)
+        x = self.conv2(self.pad(x))
+        x = self.norm2(x, gamma, beta)
+        return skip + x
 
-        x_ = self.pad0(x)
-        x_ = self.conv0(x_)
-        x_ = self.norm0(x_, gamma, beta)
-        x_ = F.relu(x_)
-
-        x_ = self.pad1(x_)
-        x_ = self.conv1(x_)
-        x_ = self.norm1(x_, gamma, beta)
-
-        x = x + x_
-        return F.relu(x)
-
-'''
-Generator
-'''
 
 class Generator(nn.Module):
     def __init__(self,
-        image_size=128,
-        channels=64,
-        n_blocks=6,
-        upscale_mode='nearest'
-    ):
+        image_size, bottom=None, channels=64, max_channels=512,
+        resblocks=6, adalinresblocks=6, act_name='relu', norm_name='in',
+        light=False, io_channels=3
+    ) -> None:
         super().__init__()
+        bottom = bottom if bottom is not None else image_size // (2**2)
+        num_sampling = int(math.log2(image_size)-math.log2(bottom))
 
-        # image_size -> image_size // 4
-        # channel    -> channel * 4
-        self.downsmaple = DownsampleBlock(channels)
-        self.encoder = nn.ModuleList([ResnetBlock(channels*4, False) for _ in range(n_blocks)])
+        ochannels = channels
+        self.input = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(io_channels, ochannels, 3, bias=False),
+            get_activation(act_name))
 
-        self.cam = CAM(channels*4)
-        self.gamma_beta = GammaBeta(channels*4, image_size//4)
+        down = []
+        resl = image_size
+        for _ in range(num_sampling):
+            channels *= 2
+            resl //= 2
+            ichannels, ochannels = ochannels, min(max_channels, channels)
+            down.extend([
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(ichannels, ochannels, 3, 2, bias=False),
+                get_normalization(norm_name, ochannels),
+                get_activation(act_name)])
+        self.down = nn.Sequential(*down)
 
-        self.decoder = nn.ModuleList([ResnetAdaILNBlock(channels*4, image_size//4, False) for _ in range(n_blocks)])
-        # image_size -> image_size * 4
-        # channel    -> 3
-        self.upsample = UpsampleBlock(channels*4, image_size//4, upscale_mode)
+        blocks = []
+        for _ in range(resblocks):
+            blocks.append(ResBlock(ochannels, norm_name, act_name))
+        self.resblocks = nn.Sequential(*blocks)
 
-    def forward(self, x):
+        self.cam  = CAM(ochannels, act_name)
 
-        x = self.downsmaple(x)
+        if not light: infeat = ochannels * resl ** 2
+        else: infeat = ochannels
+        self.flatten = nn.Sequential(
+            nn.AdaptiveAvgPool2d() if light else nn.Identity(),
+            nn.Flatten())
+        self.gammabeta = GammaBeta(infeat, ochannels, act_name)
 
-        for layer in self.encoder:
-            x = layer(x)
-        
-        x, cam_logit = self.cam(x)
-        x = F.relu(x)
-        
-        gamma, beta = self.gamma_beta(x)
+        blocks = []
+        for _ in range(adalinresblocks):
+            blocks.append(AdaLINResBlock(ochannels, act_name))
+        self.adalin_resblocks = nn.ModuleList(blocks)
 
-        for layer in self.decoder:
-            x = layer(x, gamma, beta)
+        up = []
+        for _ in range(num_sampling):
+            channels //= 2
+            ichannels, ochannels = ochannels, min(max_channels, channels)
+            up.extend([
+                nn.Upsample(scale_factor=2),
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(ichannels, ochannels, 3, bias=False),
+                LIN(ochannels),
+                get_activation(act_name)])
+        self.up = nn.Sequential(*up)
 
-        x = self.upsample(x)
+        self.output = nn.Sequential(
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(ochannels, io_channels, 3, bias=False),
+            nn.Tanh())
 
+    def forward(self, x, return_heatmap=False):
+        x = self.input(x)
+        x = self.down(x)
+        x = self.resblocks(x)
+        x, cam_logit, heatmap = self.cam(x)
+        gamma, beta = self.gammabeta(self.flatten(x))
+
+        for block in self.adalin_resblocks:
+            x = block(x, gamma, beta)
+        x = self.up(x)
+        x = self.output(x)
+
+        if return_heatmap: # we don't need heatmap when training
+            return x, cam_logit, heatmap
         return x, cam_logit
 
-
-'''
-Discriminator
-'''
 
 class Discriminator(nn.Module):
     def __init__(self,
-        channels=64,
-        n_layers=3
-    ):
+        num_layers=3, channels=64, max_channels=512, act_name='lrelu', in_channels=3
+    ) -> None:
         super().__init__()
 
-        head = [
+        ochannels = channels
+        layers = [
             nn.ReflectionPad2d(1),
-            SNConv2d(3, channels, 4, stride=2),
-            nn.LeakyReLU(0.2)
-        ]
+            SNConv2d(in_channels, ochannels, 4, 2),
+            get_activation(act_name)]
 
-        times = 1
-        for _ in range(1, n_layers-1):
-            head += [
-                nn.ReflectionPad2d(1), 
-                SNConv2d(channels*times, channels*times*2, 4, stride=2),
-                nn.LeakyReLU(0.2)
-            ]
-            times *= 2
+        for _ in range(num_layers-1):
+            channels *= 2
+            ichannels, ochannels = ochannels, min(max_channels, channels)
+            layers.extend([
+                nn.ReflectionPad2d(1),
+                SNConv2d(ichannels, ochannels, 4, 2),
+                get_activation(act_name)])
 
-        head += [
+        channels *= 2
+        ichannels, ochannels = ochannels, min(max_channels, channels)
+
+        layers.extend([
             nn.ReflectionPad2d(1),
-            SNConv2d(channels*times, channels*times*2, 4),
-            nn.LeakyReLU(0.2)
-        ]
+            SNConv2d(ichannels, ochannels, 4),
+            get_activation(act_name)])
+        self.extract = nn.Sequential(*layers)
 
-        self.head = nn.Sequential(*head)
-        self.cam = CAM(channels*times*2)
-        self.tale = nn.Sequential(
-            nn.ReflectionPad2d(1),
-            SNConv2d(channels*times*2, 1, 4)
-        )
-    
+        self.cam = CAM(ochannels, act_name, True)
+
+        self.output = nn.Sequential(
+            nn.ReflectionPad2d(1), SNConv2d(ochannels, 1, 4))
+
     def forward(self, x):
-
-        x = self.head(x)
-        x, cam_logit = self.cam(x)
-        x = F.leaky_relu(x, 0.2)
-        x = self.tale(x)
+        x = self.extract(x)
+        x, cam_logit, _ = self.cam(x) # we never need heatmap from D
+        x = self.output(x)
         return x, cam_logit
 
-if __name__ == "__main__":
-    G = Generator()
-    D = Discriminator(n_layers=5)
 
-    x = torch.Tensor(10, 3, 128, 128).normal_(0.5, 0.5)
-    image, g_cam_logit = G(x)
-    print(image.size())
+class MultiScaleD(nn.Module):
+    def __init__(self,
+        num_scale=2,
+        num_layers=3, channels=64, max_channels=512, act_name='lrelu', in_channels=3
+    ) -> None:
+        super().__init__()
 
-    logit, d_cam_logit = D(image)
-    print(logit.size())
+        self.discs = nn.ModuleList([
+            Discriminator(num_layers, channels, max_channels, act_name, in_channels)
+            for _ in range(num_scale)])
+        self.downsample = nn.AvgPool2d(2)
+
+    def forward(self, x):
+        output = []
+        for disc in self.discs:
+            output.append(disc(x))
+            x = self.downsample(x)
+        probs = torch.cat([o[0].flatten() for o in output])
+        cam_logits = torch.cat([o[1].flatten() for o in output])
+        return probs, cam_logits

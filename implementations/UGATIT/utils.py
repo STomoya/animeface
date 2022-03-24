@@ -1,243 +1,243 @@
 
-'''
-TODO: train the model
-        This model takes too much memory and time to train.
-        I will train the model when I have time or more computational power...
-'''
-
-import itertools
+from functools import partial
+from itertools import chain
+import os
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.cuda.amp import autocast, GradScaler
 from torchvision.utils import save_image
+import numpy as np
+import cv2
 
-from .model import Generator, Discriminator
+from dataset import AnimeFaceCelebA, DanbooruPortraitCelebA, AAHQCelebA
+from nnutils import get_device, loss
+from utils import Status, add_args, save_args, make_image_grid
 
-from dataset import DanbooruAutoPair, to_loader
+from implementations.UGATIT.model import Generator, MultiScaleD
 
-def train(
-    epochs,
-    dataset,
-    G_A2B, G_B2A,
-    local_DA, local_DB,
-    global_DA, global_DB,
-    optimizer_G,
-    optimizer_D,
-    L1Loss,
-    MSELoss,
-    BCELoss,
-    device,
-    verbose_interval=1000,
-    save_interval=1000
+
+def optim_step(loss, optimizer, scaler):
+    if scaler is not None:
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+    else:
+        loss.backward()
+        optimizer.step()
+
+
+@torch.no_grad()
+def color_heatmap(tensor, size):
+    b, dtype, device = tensor.size(0), tensor.dtype, tensor.device
+    # numpy, cv2 image channel format
+    arrays = tensor.detach().cpu().permute(0, 2, 3, 1).numpy()
+    # -> [0., 1.], np.float32
+    arrays -= arrays.min(axis=(1, 2, 3), keepdims=True)
+    arrays /= arrays.max(axis=(1, 2, 3), keepdims=True)
+    # -> [0, 255], np.uint8
+    arrays = (arrays * 255).astype(np.uint8)
+    # batched array with target size
+    new_array = np.zeros((b, *size, 3), dtype=np.uint8)
+    # resize + apply color map
+    for i in range(len(arrays)):
+        array = arrays[i].copy()
+        array = cv2.resize(array, size)
+        array = cv2.applyColorMap(array, cv2.COLORMAP_JET)
+        new_array[i] = array
+    # -> [0., 1.], np.float32, BGR2RGB
+    new_array = (new_array.astype(np.float32) / 255)[..., ::-1].copy()
+    # torch.Tensor, channel first
+    tensor = torch.from_numpy(new_array).to(device=device, dtype=dtype)
+    tensor = tensor.permute(0, 3, 1, 2)
+    # normalize
+    tensor = (tensor - 0.5) * 0.5
+    return tensor
+
+
+def train(args,
+    max_iters, dataset,
+    GA, GB, DA, DB, optim_G, optim_D,
+    cycle_lambda, id_lambda, cam_lambda,
+    device, amp, save, logfile, loginterval
 ):
 
-    Tensor = torch.FloatTensor
-    global_patch = (1,  6,  6)
-    local_patch  = (1, 30, 30)
+    status = Status(max_iters, False, logfile, loginterval, __name__)
+    scaler = GradScaler() if amp else None
 
-    batches_done = 0
+    adv_fn = loss.LSGANLoss()
+    l1_fn  = nn.L1Loss()
+    cam_fn = nn.BCEWithLogitsLoss()
 
-    for epoch in range(epochs):
-        for index, (A, B) in enumerate(dataset):
-            A = A.type(Tensor).to(device)
-            B  = B.type(Tensor).to(device)
+    status.log_training(args, GB, DA)
 
-            # label smoothing
-            local_real = ((1.0 - 0.7) * torch.rand(A.size(0), *local_patch) + 0.7).to(device)
-            local_fake = ((0.3 - 0.0) * torch.rand(A.size(0), *local_patch) + 0.0).to(device)
-            global_real = ((1.0 - 0.7) * torch.rand(A.size(0), *global_patch) + 0.7).to(device)
-            global_fake = ((0.3 - 0.0) * torch.rand(A.size(0), *global_patch) + 0.0).to(device)
+    while not status.is_end():
+        for A, B in dataset:
+            optim_D.zero_grad()
+            optim_G.zero_grad()
+            A = A.to(device)
+            B = B.to(device)
 
-            '''
-            Discriminator
-            '''
+            with autocast(amp):
+                # G forward
+                # translate
+                AB, g_AB_cam_logit = GB(A)
+                BA, g_BA_cam_logit = GA(B)
+                # identity
+                AA, g_AA_cam_logit = GA(A)
+                BB, g_BB_cam_logit = GB(B)
+                # cycle
+                ABA, _ = GA(AB)
+                BAB, _ = GB(BA)
 
-            # gen image
-            A2B, _ = G_A2B(A)
-            B2A, _ = G_B2A(B)
+                # D forward (SG)
+                real_a_prob, real_a_cam_logit = DA(A)
+                real_b_prob, real_b_cam_logit = DB(B)
+                fake_a_prob, fake_a_cam_logit = DA(BA.detach())
+                fake_b_prob, fake_b_cam_logit = DB(AB.detach())
 
-            # discriminate
-            # real
-            A_local,  A_local_cam  = local_DA(A)
-            A_global, A_global_cam = global_DA(A)
-            B_local,  B_local_cam  = local_DB(B)
-            B_global, B_global_cam = global_DB(B)
-            # fake
-            B2A_local,  B2A_local_cam  = local_DA(B2A)
-            B2A_global, B2A_global_cam = global_DA(B2A)
-            A2B_local,  A2B_local_cam  = local_DB(A2B)
-            A2B_global, A2B_global_cam = global_DB(A2B)
+                # loss
+                adv_a_loss = adv_fn.d_loss(real_a_prob, fake_a_prob)
+                adv_b_loss = adv_fn.d_loss(real_b_prob, fake_b_prob)
+                adv_loss = adv_a_loss + adv_b_loss
+                adv_a_cam_loss = adv_fn.d_loss(real_a_cam_logit, fake_a_cam_logit)
+                adv_b_cam_loss = adv_fn.d_loss(real_b_cam_logit, fake_b_cam_logit)
+                adv_cam_loss = adv_a_cam_loss + adv_b_cam_loss
+                D_loss = adv_loss + adv_cam_loss
 
-            # cam label
-            cam_local_real = ((1.0 - 0.7) * torch.rand(*A_local_cam.size()) + 0.7).to(device)
-            cam_local_fake = ((0.3 - 0.0) * torch.rand(*A_local_cam.size()) + 0.0).to(device)
-            cam_global_real = ((1.0 - 0.7) * torch.rand(*A_global_cam.size()) + 0.7).to(device)
-            cam_global_fake = ((0.3 - 0.0) * torch.rand(*A_global_cam.size()) + 0.0).to(device)
+            optim_step(D_loss, optim_D, scaler)
 
-            # losses
-            A_local_loss      = MSELoss(A_local,      local_real)      + MSELoss(B2A_local,      local_fake)
-            A_local_cam_loss  = MSELoss(A_local_cam,  cam_local_real)  + MSELoss(B2A_local_cam,  cam_local_fake)
-            A_global_loss     = MSELoss(A_global,     global_real)     + MSELoss(B2A_global,     global_fake)
-            A_global_cam_loss = MSELoss(A_global_cam, cam_global_real) + MSELoss(B2A_global_cam, cam_global_fake)
-            B_local_loss      = MSELoss(B_local,      local_real)      + MSELoss(A2B_local,      local_fake)
-            B_local_cam_loss  = MSELoss(B_local_cam,  cam_local_real)  + MSELoss(A2B_local_cam,  cam_local_fake)
-            B_global_loss     = MSELoss(B_global,     global_real)     + MSELoss(A2B_global,     global_fake)
-            B_global_cam_loss = MSELoss(B_global_cam, cam_global_real) + MSELoss(A2B_global_cam, cam_global_fake)
+            with autocast(amp):
+                # D forward
+                fake_a_prob, fake_a_cam_logit = DA(BA)
+                fake_b_prob, fake_b_cam_logit = DB(AB)
 
-            A_loss = A_local_loss + A_local_cam_loss + A_global_loss + A_global_cam_loss
-            B_loss = B_local_loss + B_local_cam_loss + B_global_loss + B_global_cam_loss
-            D_loss = A_loss + B_loss
+                # loss
+                adv_a_loss = adv_fn.g_loss(fake_a_prob)
+                adv_b_loss = adv_fn.g_loss(fake_b_prob)
+                adv_loss = adv_a_loss + adv_b_loss
+                adv_a_cam_loss = adv_fn.g_loss(fake_a_cam_logit)
+                adv_b_cam_loss = adv_fn.g_loss(fake_b_cam_logit)
+                adv_cam_loss = adv_a_cam_loss + adv_b_cam_loss
+                id_loss, cycle_loss, cam_loss = 0, 0, 0
+                if id_lambda > 0:
+                    id_a_loss = l1_fn(AA, A)
+                    id_b_loss = l1_fn(BB, B)
+                    id_loss = (id_a_loss + id_b_loss) * id_lambda
+                if cycle_lambda > 0:
+                    cycle_a_loss = l1_fn(ABA, A)
+                    cycle_b_loss = l1_fn(BAB, B)
+                    cycle_loss = (cycle_a_loss + cycle_b_loss) * cycle_lambda
+                if cam_lambda > 0:
+                    cam_a_loss = cam_fn(g_BA_cam_logit, torch.ones_like(g_BA_cam_logit)) \
+                        + cam_fn(g_AA_cam_logit, torch.zeros_like(g_AA_cam_logit))
+                    cam_b_loss = cam_fn(g_AB_cam_logit, torch.ones_like(g_AB_cam_logit)) \
+                        + cam_fn(g_BB_cam_logit, torch.zeros_like(g_BB_cam_logit))
+                    cam_loss = (cam_a_loss + cam_b_loss) * cam_lambda
+                G_loss = adv_loss + adv_cam_loss + id_loss + cycle_loss + cam_loss
 
-            optimizer_D.zero_grad()
-            D_loss.backward()
-            optimizer_D.step()
+            optim_step(G_loss, optim_G, scaler)
 
-            '''
-            Generator
-            '''
+            if status.batches_done % save == 0:
+                size = A.size(-1)
+                to_heatmap = partial(color_heatmap, size=(size, size))
+                with torch.no_grad():
+                    AB, _, AB_heatmap = GB(A, return_heatmap=True)
+                    BA, _, BA_heatmap = GA(B, return_heatmap=True)
+                save_image(make_image_grid(A, to_heatmap(AB_heatmap), AB, B, to_heatmap(BA_heatmap), BA),
+                    os.path.join(f'implementations/UGATIT/result/{status.batches_done}.jpg'),
+                    nrow=6, normalize=True, value_range=(-1, 1))
+                torch.save(dict(GA=GA.state_dict(), GB=GB.state_dict()),
+                    os.path.join(f'implementations/UGATIT/result/model_{status.batches_done}.pth'))
+            save_image(make_image_grid(AB, BA), 'running.jpg', nrow=2*4, normalize=True, value_range=(-1, 1))
 
-            # gen image
-            A2B, A2B_cam = G_A2B(A)
-            B2A, B2A_cam = G_B2A(B)
+            if scaler is not None: scaler.update()
+            status.update(G=G_loss.item(), D=D_loss.item())
 
-            # re-gen image
-            A2B2A, _ = G_B2A(A2B)
-            B2A2B, _ = G_A2B(B2A)
+            if status.is_end():
+                break
+    status.plot_loss()
 
-            # identity
-            A2A, A2A_cam = G_B2A(A)
-            B2B, B2B_cam = G_A2B(B)
-
-            # fool discriminator
-            B2A_local,  B2A_local_cam  = local_DA(B2A)
-            B2A_global, B2A_global_cam = global_DA(B2A)
-            A2B_local,  A2B_local_cam  = local_DB(A2B)
-            A2B_global, A2B_global_cam = global_DB(A2B)
-
-            # generator cam label
-            cam_real = ((1.0 - 0.7) * torch.rand(*A2B_cam.size()) + 0.7).to(device)
-            cam_fake = ((0.3 - 0.0) * torch.rand(*A2B_cam.size()) + 0.0).to(device)
-
-            # losses
-            # adversarial
-            A_local_loss      = MSELoss(B2A_local,      local_real)
-            A_local_cam_loss  = MSELoss(B2A_local_cam,  cam_local_real)
-            A_global_loss     = MSELoss(B2A_global,     global_real)
-            A_global_cam_loss = MSELoss(B2A_global_cam, cam_global_real)
-            B_local_loss      = MSELoss(A2B_local,      local_real)
-            B_local_cam_loss  = MSELoss(A2B_local_cam,  cam_local_real)
-            B_global_loss     = MSELoss(A2B_global,     global_real)
-            B_global_cam_loss = MSELoss(A2B_global_cam, cam_global_real)
-
-            # cycle
-            A2B2A_loss = L1Loss(A2B2A, A)
-            B2A2B_loss = L1Loss(B2A2B, B)
-
-            # identity
-            A2A_loss = L1Loss(A2A, A)
-            B2B_loss = L1Loss(B2B, B)
-
-            A2A_cam_loss = BCELoss(B2A_cam, cam_real) + BCELoss(A2A_cam, cam_fake)
-            B2B_cam_loss = BCELoss(A2B_cam, cam_real) + BCELoss(B2B_cam, cam_fake)
-
-            A_loss = A_local_loss + A_local_cam_loss + A_global_loss + A_global_cam_loss + 10 * A2B2A_loss + 10 * A2A_loss + 1000 * A2A_cam_loss
-            B_loss = B_local_loss + B_local_cam_loss + B_global_loss + B_global_cam_loss + 10 * B2A2B_loss + 10 * B2B_loss + 1000 * B2B_cam_loss
-            G_loss = A_loss + B_loss
-
-            optimizer_G.zero_grad()
-            G_loss.backward()
-            optimizer_G.step()
-
-
-            if batches_done % verbose_interval == 0:
-                print('{:6} G Loss : {:.5f} D Loss : {:.5f}'.format(batches_done, G_loss.item(), D_loss.item()))
-
-            if batches_done % save_interval == 0:
-                image_grid = make_grid(A, A2B, B, n_image=999)
-                save_image(image_grid, './implementations/UGATIT/result/{}.png'.format(batches_done), nrow=9, normalize=True)
-
-            batches_done += 1
-
-
-def make_grid(A, A2B, B, n_image=999):
-    b = A.size(0)
-    split_A = A.chunk(b)
-    split_A2B = A2B.chunk(b)
-    split_B = B.chunk(b)
-
-    images = []
-    for index, (a, a2b, b) in enumerate(zip(split_A, split_A2B, split_B)):
-        images += [a, a2b, b]
-        if index == n_image:
-            break
-
-    image_grid = torch.cat(images, dim=0)
-    return image_grid
-
-from PIL import ImageFilter
-
-class SoftMozaic(object):
-    def __init__(self, linear_scale, radius):
-        self.linear_scale = linear_scale
-        self.radius = radius
-
-    def __call__(self, sample):
-        sample = sample.filter(ImageFilter.GaussianBlur(self.radius))
-        return sample.resize([int(x / self.linear_scale) for x in sample.size]).resize(sample.size)
 
 def main(parser):
-    import warnings
-    warnings.warn('Reimplement. This is too old!')
-    exit()
 
-    import torchvision.transforms as T
+    parser = add_args(parser,
+        dict(
+            image_channels  = [3, 'image channels'],
+            bottom          = [int, 'bottom size. if not specified, will be image_size // 4'],
+            g_channels      = [64, 'minimum channel width'],
+            g_max_channels  = [512, 'maximum channel width'],
+            resblocks       = [6, 'number of residual blocks'],
+            adalinresblocks = [6, 'number of adalin residual blocks'],
+            g_act_name      = ['relu', 'activation function name'],
+            norm_name       = ['in', 'normalization layer name'],
+            light           = [False, 'light weight'],
 
-    epochs = 5
+            num_scale       = [2, 'number of scales for multi scale D'],
+            num_layers      = [3, 'number of layers'],
+            d_channels      = [64, 'minimum channel width'],
+            d_max_channels  = [512, 'maximum channel width'],
+            d_act_name      = ['relu', 'activation function name'],
 
-    lr = 0.0001
-    betas = (0.5, 0.999)
-    batch_size = 5
+            g_lr            = [0.0002, 'learning rate'],
+            d_lr            = [0.0002, 'learning rate'],
+            betas           = [[0.5, 0.999], 'betas'],
+            cycle_lambda    = [10., 'lambda for cycle consistency loss'],
+            identity_lambda = [10., 'lambda for identity loss'],
+            cam_lambda      = [1000., 'lambda for CAM loss']))
+    args = parser.parse_args()
+    save_args(args)
 
-    pair_trasform = SoftMozaic(1.3, 0.4)
+    device = get_device(not args.disable_gpu)
+    amp = not args.disable_amp and not args.disable_gpu
 
-    dataset = DanbooruAutoPair(image_size, pair_trasform)
-    dataset.co_transform_head = T.Compose([
-        T.CenterCrop((350, 350)),
-        T.Resize(128)
-    ])
-    dataset = to_loader(dataset, batch_size)
+    # dataset
+    if args.dataset == 'animeface':
+        dataset = AnimeFaceCelebA.asloader(
+            args.batch_size, (args.image_size, args.min_year),
+            pin_memory=not args.disable_gpu)
+    elif args.dataset == 'danbooru':
+        dataset = DanbooruPortraitCelebA.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
+    elif args.dataset == 'aahq':
+        dataset = AAHQCelebA.asloader(
+            args.batch_size, (args.image_size, args.num_images),
+            pin_memory=not args.disable_gpu)
 
-    device = torch.device('cpu')
-    # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if args.max_iters < 0:
+        args.max_iters = len(dataset) * args.default_epochs
 
-    G_A2B = Generator(n_blocks=6)
-    G_B2A = Generator(n_blocks=6)
-    local_DA = Discriminator(n_layers=3)
-    local_DB = Discriminator(n_layers=3)
-    global_DA = Discriminator(n_layers=5)
-    global_DB = Discriminator(n_layers=5)
+    # models
+    # B -> A
+    GA = Generator(
+        args.image_size, args.bottom, args.g_channels, args.g_max_channels,
+        args.resblocks, args.adalinresblocks, args.g_act_name,
+        args.norm_name, args.light, args.image_channels)
+    # A -> B
+    GB = Generator(
+        args.image_size, args.bottom, args.g_channels, args.g_max_channels,
+        args.resblocks, args.adalinresblocks, args.g_act_name,
+        args.norm_name, args.light, args.image_channels)
+    # D(A)
+    DA = MultiScaleD(
+        args.num_scale, args.num_layers, args.d_channels, args.d_max_channels,
+        args.d_act_name, args.image_channels)
+    # D(B)
+    DB = MultiScaleD(
+        args.num_scale, args.num_layers, args.d_channels, args.d_max_channels,
+        args.d_act_name, args.image_channels)
 
-    G_A2B.to(device)
-    G_B2A.to(device)
-    local_DA.to(device)
-    local_DB.to(device)
-    global_DA.to(device)
-    global_DB.to(device)
+    GA.to(device)
+    GB.to(device)
+    DA.to(device)
+    DB.to(device)
 
-    optimizer_G = optim.Adam(itertools.chain(G_A2B.parameters(), G_B2A.parameters()), lr=lr, betas=betas)
-    optimizer_D = optim.Adam(itertools.chain(local_DA.parameters(), local_DB.parameters(), global_DA.parameters(), global_DB.parameters()), lr=lr, betas=betas)
+    # optimizers
+    optim_G = optim.Adam(chain(GA.parameters(), GB.parameters()), lr=args.g_lr, betas=args.betas)
+    optim_D = optim.Adam(chain(DA.parameters(), DB.parameters()), lr=args.d_lr, betas=args.betas)
 
-    MSELoss = nn.MSELoss()
-    L1Loss = nn.L1Loss()
-    BCELoss = nn.BCEWithLogitsLoss()
-
-    torch.cuda.empty_cache()
-
-    train(
-        epochs, dataset, G_A2B, G_B2A,
-        local_DA, local_DB, global_DA, global_DB,
-        optimizer_G, optimizer_D,
-        L1Loss, MSELoss, BCELoss,
-        device, 1000, 1000
-    )
+    train(args, args.max_iters, dataset,
+        GA, GB, DA, DB, optim_G, optim_D,
+        args.cycle_lambda, args.identity_lambda, args.cam_lambda,
+        device, amp, args.save, args.log_file, args.log_interval)

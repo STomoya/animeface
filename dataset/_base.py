@@ -11,8 +11,9 @@ import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image as pilImage
+from PIL import Image as pilImage, ImageFile
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+ImageFile.LOAD_TRUNCATED_IMAGES=True
 
 def make_default_transform(
     image_size: int,
