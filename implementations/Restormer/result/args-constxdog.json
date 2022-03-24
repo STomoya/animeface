@@ -1,0 +1,46 @@
+{
+  "name": "Restormer",
+  "image_size": 128,
+  "batch_size": 8,
+  "dataset": "danbooru",
+  "min_year": 2005,
+  "num_images": 60000,
+  "save": 1000,
+  "max_iters": -1,
+  "default_epochs": 100,
+  "disable_gpu": false,
+  "disable_amp": false,
+  "log_file": "log.log",
+  "log_interval": 1,
+  "debug": false,
+  "image_channels": 3,
+  "num_blocks": [
+    2,
+    6,
+    6,
+    8
+  ],
+  "num_heads": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "num_refinement_blocks": 4,
+  "ff_expansion": 2.66,
+  "g_channels": 48,
+  "g_norm_name": "ln",
+  "g_act_name": "gelu",
+  "skip_input": false,
+  "num_layers": 3,
+  "d_channels": 64,
+  "max_channels": 512,
+  "d_norm_name": "bn",
+  "d_act_name": "lrelu",
+  "lr": 0.0002,
+  "betas": [
+    0.5,
+    0.999
+  ],
+  "pixel_lambda": 10.0
+}
