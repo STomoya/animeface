@@ -1,22 +1,55 @@
-version: '3'
-
 services:
-  python:
+  torch:
     build:
       context: .
-      dockerfile: docker/torch/Dockerfile
+      dockerfile: ./docker/torch/Dockerfile
       args:
-        - UID=${USERID}
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+        # [format] pytorch/pytorch:${PYTORCH_VERSION}-cuda${PYTORCH_CUDA_VERSION}-cudnn${PYTORCH_CUDNN_VERSION}-devel
+        # See https://hub.docker.com/r/pytorch/pytorch/tags?page=1&name=devel
+        # - PYTORCH_VERSION=1.13.0
+        # - PYTORCH_CUDA_VERSION=11.6
+        # - PYTORCH_CUDNN_VERSION=8
+        # User ID. for acounts with UID!=1000
+        - UID=${USERID:-1000}
+        # - USERNAME=torchuser
+
     volumes:
       - .:/usr/src
       - /mnt/D/Data/animefacedataset:/usr/src/data/animefacedataset
       - /mnt/D/Data/danbooru:/usr/src/data/danbooru
       - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
       - /mnt/D/Data/celeba:/usr/src/data/celeba
-      - /mnt/D/Data/aahq/aligned:/usr/src/data/aahq
-    working_dir: /usr/src
-    tty: true
     shm_size: '8gb'
+    working_dir: /usr/src
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ['0']
+
+
+  preprocess:
+    build:
+      context: .
+      dockerfile: docker/preprocess/Dockerfile
+      args:
+        - UID=${USERID:-1000}
+    volumes:
+      - .:/usr/src
+      - /mnt/D/Data/animefacedataset:/usr/src/data/animefacedataset
+      - /mnt/D/Data/danbooru:/usr/src/data/danbooru
+      - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
+      - /mnt/D/Data/celeba:/usr/src/data/celeba
+    working_dir: /usr/src
+    shm_size: '8gb'
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ['0']
