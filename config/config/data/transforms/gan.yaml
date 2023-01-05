@@ -1,0 +1,8 @@
+- name: Resize
+  size: ${config.data.image_size}
+- name: CenterCrop
+  size: ${config.data.image_size}
+- name: ToTensor
+- name: Normalize
+  mean: 0.5
+  std: 0.5

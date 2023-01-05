@@ -1,0 +1,31 @@
+defaults:
+  - _self_
+  - config: ??? # always run code with "config=<config name>".
+
+env:
+  device: cuda # device (cpu, cuda, cuda:0, cuda:1, ...). distributed not supported.
+  amp: true # use AMP?
+
+reproduce:
+  enabled: false # enable reproducible training?
+  params:
+    seed: 3407 # random seed
+    use_deterministic_algorithms: true
+    warn_only: true
+    cudnn_benchmark: false
+
+config:
+  run:
+    name: ??? # name
+    folder: results # root folder for ckpt. "./resuls/<config.run.name>/<launched time>" will be created/used as the root dir.
+    log_file: log.log # log file name.
+    log_interval: 100 # interval between each log.
+
+  data: null # see config/gan.yaml for example
+
+  model: # see config/gan.yaml for example
+    ema: true # use exponential moving average?
+    ema_decay: 0.999 # decay for ema
+
+  train_loop: null # # see config/gan.yaml for example
+  train: null # see config/gan.yaml for example
