@@ -1,0 +1,77 @@
+env:
+  device: cuda
+  amp: true
+reproduce:
+  enabled: false
+  params:
+    seed: 3407
+    use_deterministic_algorithms: true
+    warn_only: true
+    cudnn_benchmark: false
+config:
+  run:
+    name: GAN
+    folder: results
+    log_file: log.log
+    log_interval: 100
+  data:
+    data_root: ./data/animefacedataset/images
+    image_size: 128
+    num_images: null
+    transforms:
+    - name: Resize
+      size: ${config.data.image_size}
+    - name: CenterCrop
+      size: ${config.data.image_size}
+    - name: ToTensor
+    - name: Normalize
+      mean: 0.5
+      std: 0.5
+    loader:
+      batch_size: 32
+      shuffle: true
+      pin_memory: true
+      drop_last: true
+      num_workers: 4
+  model:
+    ema: true
+    ema_decay: 0.999
+    generator:
+      class_name: animeface.GAN.model.Generator
+      latent_dim: 128
+      image_shape:
+      - 3
+      - ${config.data.image_size}
+      - ${config.data.image_size}
+    discriminator:
+      class_name: animeface.GAN.model.Discriminator
+      image_shape: ${config.model.generator.image_shape}
+  train_loop: animeface.train_loops.gan
+  train:
+    epochs: 100
+    save_every: 5000
+    checkpoint_frequency: ${config.train.save_every}
+    snapshot_every: ${config.train.save_every}
+    loss:
+      adversarial:
+        class_name: storch.loss.gan.GANLoss
+      gradient_penalty:
+        type: null
+        every: 16
+    lambdas:
+      adv: 1.0
+      gp: 10.0
+    augmentation: null
+    optimizer:
+      generator:
+        class_name: torch.optim.Adam
+        lr: 0.0002
+        betas:
+        - 0.5
+        - 0.999
+      discriminator:
+        class_name: torch.optim.Adam
+        lr: 0.0002
+        betas:
+        - 0.5
+        - 0.999
