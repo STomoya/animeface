@@ -1,14 +1,4 @@
-# ML
-scikit-learn
-# visualization
-matplotlib
-tqdm
-# math
-scipy
-# image
-scikit-image
-opencv-python
-pillow
+git+https://github.com/STomoya/storch
 # cpp extension
 ninja
 # modeling
