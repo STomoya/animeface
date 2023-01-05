@@ -1,0 +1,11 @@
+# dataset requiring user to specify the data_root and transforms
+# sample config.data.data_root=./images config/data/transforms=gan
+defaults:
+  - _self_
+  - transforms: ???
+  - loader: base
+
+data_root: ./data/images # root directory to images.
+
+transforms: ???
+loader: ???

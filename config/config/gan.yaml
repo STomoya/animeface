@@ -1,18 +1,13 @@
 defaults:
   - _self_
-  - data/transforms: gan
-  - data/loader: base
+  - data: base
 
 run:
   name: GAN
 
 data:
-  data_root: ./data/images # root directory to images.
-  image_size: 128 # image size.
+  image_size: 128
   num_images: null # number of images. null will use all images.
-
-  transforms: ???
-  loader: ???
 
 model:
   generator: # generator config
