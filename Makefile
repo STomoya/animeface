@@ -1,40 +1,37 @@
 
-# add folder/files for new implementation
 new:
-	mkdir implementations/${name}
-	mkdir implementations/${name}/result
-	touch implementations/${name}/__init__.py
-	touch implementations/${name}/model.py
-	touch implementations/${name}/utils.py
+	mkdir animeface/implementations/${name}
+	touch animeface/implementations/${name}/model.py
+	touch config/config/new.yaml
 
-# reset results folder
-reset:
-	sudo rm -rf implementations/${name}/result/*
-
-# delete an implementation
 del:
-	rm -r implementations/${name}
+	rm -rf animeface/implementations/${name}
 
-# run a specific single file
 check:
-	docker-compose run --rm python python ${file}
-
-# RUN
+	docker compose run --rm torch python ${file}
 
 # run
+# make run config=gan args="config.train.epochs=10"
 run:
-	docker-compose run --rm python python main.py ${ARGS}
+	docker compose run --rm torch python -m animeface config=${config} ${args}
 
 # detached run
 drun:
-	docker-compose run --rm -d python python main.py ${ARGS}
+	docker compose run --rm -d torch python -m animeface config=${config} ${args}
 
-# local run
-# use local docker-compose file named `local-dc.yml`
+# resume training from a config file
+# make resume config=./path/to/config.yaml
+resume:
+	docker compose run --rm torch python -m animeface ${config}
+
+# detached resume
+dresume:
+	docker compose run --rm -d torch python -m animeface ${config}
+
+# run with different docker-compose file
 lrun:
-	docker-compose -f local-dc.yml run --rm python python main.py ${ARGS}
+	docker compose -f docker-compose.local.yaml run --rm torch python -m animeface ${args}
 
-# local detached run
-# use local docker-compose file named `local-dc.yml`
-ldrun:
-	docker-compose -f local-dc.yml run --rm -d python python main.py ${ARGS}
+# detached run with different docker-compose file
+dlrun:
+	docker compose -f docker-compose.local.yaml run --rm -d torch python -m animeface ${args}
