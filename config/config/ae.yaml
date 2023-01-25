@@ -1,0 +1,38 @@
+defaults:
+  - _self_
+  - data: base
+
+run:
+  name: AE
+
+data:
+  image_size: 128
+  num_images: null
+
+model:
+  model:
+    class_name: animeface.implementations.AE.model.AE
+    image_size: ${config.data.image_size}
+    embed_dim: 256
+    num_hid_layers: 4
+    image_channels: 3
+    channels: 32
+    norm_name: bn
+    act_name: relu
+
+train_loop: animeface.implementations.AE.train_loop
+
+train:
+  epochs: 100
+
+  save_every: 5000
+  checkpoint_frequency: ${config.train.save_every}
+  snapshot_every: ${config.train.save_every}
+
+  loss:
+    class_name: torch.nn.MSELoss
+
+  optimizer:
+    class_name: torch.optim.Adam
+    lr: 0.001
+    betas: [0.9, 0.999]
