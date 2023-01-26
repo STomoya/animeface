@@ -1,0 +1,63 @@
+env:
+  device: cuda
+  amp: false
+reproduce:
+  enabled: false
+  params:
+    seed: 3407
+    use_deterministic_algorithms: true
+    warn_only: true
+    cudnn_benchmark: false
+config:
+  run:
+    name: VAE
+    folder: results
+    log_file: log.log
+    log_interval: 100
+  data:
+    image_size: 128
+    num_images: null
+    data_root: ./data/animefacedataset/images
+    filter_by_year: 2005
+    transforms:
+    - name: Resize
+      size: ${config.data.image_size}
+    - name: CenterCrop
+      size: ${config.data.image_size}
+    - name: ToTensor
+    - name: Normalize
+      mean: 0.5
+      std: 0.5
+    loader:
+      batch_size: 32
+      shuffle: true
+      pin_memory: true
+      drop_last: true
+      num_workers: 4
+  model:
+    ema: true
+    ema_decay: 0.999
+    model:
+      class_name: animeface.implementations.VAE.model.VAE
+      image_size: ${config.data.image_size}
+      embed_dim: 128
+      num_hid_layers: 5
+      image_channels: 3
+      channels: 32
+      norm_name: bn
+      act_name: lrelu
+  train_loop: animeface.implementations.VAE.train_loop
+  train:
+    epochs: 100
+    save_every: 5000
+    checkpoint_frequency: ${config.train.save_every}
+    snapshot_every: ${config.train.save_every}
+    loss:
+      class_name: torch.nn.MSELoss
+      reduction: sum
+    optimizer:
+      class_name: torch.optim.Adam
+      lr: 0.001
+      betas:
+      - 0.9
+      - 0.999
