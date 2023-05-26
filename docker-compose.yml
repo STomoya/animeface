@@ -11,11 +11,18 @@ services:
         - USERNAME=torchuser
 
     volumes:
-      - .:${WORKING_DIR}
-      - /mnt/D/Data/animefacedataset:${WORKING_DIR}/data/animefacedataset
-      - /mnt/D/Data/danbooru:${WORKING_DIR}/data/danbooru
-      - /mnt/D/Data/illustration2vec:${WORKING_DIR}/data/illustration2vec
-      - /mnt/D/Data/celeba:${WORKING_DIR}/data/celeba
+      - type: bind
+        source: .
+        target: ${WORKING_DIR}
+      - type: bind
+        source: /mnt/D/Data/animefacedataset
+        target: ${WORKING_DIR}/data/animefacedataset
+      - type: bind
+        source: /mnt/D/Data/danbooru
+        target: ${WORKING_DIR}/data/danbooru
+      - type: bind
+        source: /mnt/D/Data/celeba
+        target: ${WORKING_DIR}/data/celeba
 
     shm_size: '8gb'
     init: true
@@ -48,11 +55,18 @@ services:
         - USERNAME=torchuser
 
     volumes:
-      - .:${WORKING_DIR}
-      - /mnt/D/Data/animefacedataset:${WORKING_DIR}/data/animefacedataset
-      - /mnt/D/Data/danbooru:${WORKING_DIR}/data/danbooru
-      - /mnt/D/Data/illustration2vec:${WORKING_DIR}/data/illustration2vec
-      - /mnt/D/Data/celeba:${WORKING_DIR}/data/celeba
+      - type: bind
+        source: .
+        target: ${WORKING_DIR}
+      - type: bind
+        source: /mnt/D/Data/animefacedataset
+        target: ${WORKING_DIR}/data/animefacedataset
+      - type: bind
+        source: /mnt/D/Data/danbooru
+        target: ${WORKING_DIR}/data/danbooru
+      - type: bind
+        source: /mnt/D/Data/celeba
+        target: ${WORKING_DIR}/data/celeba
 
     shm_size: '8gb'
     init: true
