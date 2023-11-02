@@ -1,0 +1,49 @@
+defaults:
+  - _self_
+  - data: base
+
+run:
+  name: WGAN
+
+data:
+  image_size: 128
+  num_images: null
+
+model:
+  generator:
+    class_name: animeface.implementations.DCGAN.model.Generator
+    latent_dim: 128
+  discriminator:
+    class_name: animeface.implementations.DCGAN.model.Discriminator
+
+train_loop: animeface.implementations.WGAN.train_loop
+
+train:
+  epochs: 100
+
+  save_every: 5000
+  checkpoint_frequency: ${config.train.save_every}
+  snapshot_every: ${config.train.save_every}
+
+  loss:
+    adversarial:
+      class_name: storch.loss.gan.WGANLoss
+    gradient_penalty:
+      type: null
+      every: 1
+
+  lambdas:
+    adv: 1.0
+    gp: 10.0
+
+  augmentation: null
+
+  optimizer:
+    generator:
+      class_name: torch.optim.Adam
+      lr: 0.0002
+      betas: [0.0, 0.999]
+    discriminator:
+      class_name: torch.optim.Adam
+      lr: 0.0002
+      betas: [0.0, 0.999]

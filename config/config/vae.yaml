@@ -1,0 +1,39 @@
+defaults:
+  - _self_
+  - data: base
+
+run:
+  name: VAE
+
+data:
+  image_size: 128
+  num_images: null
+
+model:
+  model:
+    class_name: animeface.implementations.VAE.model.VAE
+    image_size: ${config.data.image_size}
+    embed_dim: 128
+    num_hid_layers: 5
+    image_channels: 3
+    channels: 32
+    norm_name: bn
+    act_name: lrelu
+
+train_loop: animeface.implementations.VAE.train_loop
+
+train:
+  epochs: 100
+
+  save_every: 5000
+  checkpoint_frequency: ${config.train.save_every}
+  snapshot_every: ${config.train.save_every}
+
+  loss:
+    class_name: torch.nn.MSELoss
+    reduction: sum
+
+  optimizer:
+    class_name: torch.optim.Adam
+    lr: 0.001
+    betas: [0.9, 0.999]

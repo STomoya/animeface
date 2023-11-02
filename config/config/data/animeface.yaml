@@ -1,0 +1,11 @@
+# animeface dataset for unconditional generation
+defaults:
+  - _self_
+  - transforms: gan
+  - loader: base
+
+data_root: ./data/animefacedataset/images # root directory to images.
+filter_by_year: 2005
+
+transforms: ???
+loader: ???

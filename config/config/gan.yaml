@@ -1,0 +1,56 @@
+defaults:
+  - _self_
+  - data: base
+
+run:
+  name: GAN
+
+data:
+  image_size: 128
+  num_images: null # number of images. null will use all images.
+
+model:
+  generator: # generator config
+    class_name: animeface.implementations.GAN.model.Generator # class name
+    latent_dim: 128 # others are arguments
+    image_shape:
+      - 3
+      - ${config.data.image_size}
+      - ${config.data.image_size}
+  discriminator: # discriminator config
+    class_name: animeface.implementations.GAN.model.Discriminator # class name
+    image_shape: ${config.model.generator.image_shape} # others are arguments
+
+train_loop: animeface.train_loops.stylegan2 # the training loop to use. see animeface/train_loops/gan.py.
+
+train:
+  epochs: 100 # epochs
+
+  save_every: 5000 # interval for saving. used as default value for the bellow two configs.
+  checkpoint_frequency: ${config.train.save_every}
+  snapshot_every: ${config.train.save_every}
+
+  loss:
+    adversarial: # one of GANLoss, LSGANLoss, NonSaturatingLoss, WGANLoss, and HingeLoss
+      class_name: storch.loss.gan.GANLoss
+    gradient_penalty:
+      type: null # one of null, r1
+      every: 1 # apply gp every n step. for lazy regularization.
+
+  lambdas: # coefs
+    adv: 1.0
+    gp: 10.0
+
+  augmentation: null # config for augmentation.
+    # class_name: thirdparty.diffaugment.DifferentiableAugmentation
+    # policy: color,translation
+
+  optimizer: # optimizers
+    generator:
+      class_name: torch.optim.Adam
+      lr: 0.0002
+      betas: [0.5, 0.999]
+    discriminator:
+      class_name: torch.optim.Adam
+      lr: 0.0002
+      betas: [0.5, 0.999]

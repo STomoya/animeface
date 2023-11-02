@@ -1,6 +1,7 @@
 # illustration2vec requirements
 chainer
 illustration2vec
+protobuf<=3.20
 # image
 scikit-image
 opencv-python

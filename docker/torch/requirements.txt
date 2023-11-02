@@ -1,17 +1,6 @@
-# ML
-scikit-learn
-# visualization
-matplotlib
-tqdm
-loguru
-rich
-# math
-scipy
-# image
-scikit-image
-opencv-python
-# tensor ops
-opt_einsum
-einops
+git+https://github.com/STomoya/storch
 # cpp extension
 ninja
+# modeling
+transformers
+timm

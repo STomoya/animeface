@@ -1,22 +1,87 @@
-version: '3'
-
 services:
-  python:
+  torch:
     build:
       context: .
-      dockerfile: docker/torch/Dockerfile
+      dockerfile: ./docker/torch/Dockerfile
       args:
-        - UID=${USERID}
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+        - BASE_TORCH_VERSION=2.0.1
+        - BASE_CUDA_VERSION=11.7
+        - BASE_CUDNN_VERSION=8
+        - UID=${UID}
+        - USERNAME=torchuser
+
     volumes:
-      - .:/usr/src
-      - /mnt/D/Data/animefacedataset:/usr/src/data/animefacedataset
-      - /mnt/D/Data/danbooru:/usr/src/data/danbooru
-      - /mnt/D/Data/illustration2vec:/usr/src/data/illustration2vec
-      - /mnt/D/Data/celeba:/usr/src/data/celeba
-      - /mnt/D/Data/aahq/aligned:/usr/src/data/aahq
-    working_dir: /usr/src
-    tty: true
+      - type: bind
+        source: .
+        target: ${WORKING_DIR}
+      - type: bind
+        source: /mnt/D/Data/animefacedataset
+        target: ${WORKING_DIR}/data/animefacedataset
+      - type: bind
+        source: /mnt/D/Data/danbooru
+        target: ${WORKING_DIR}/data/danbooru
+      - type: bind
+        source: /mnt/D/Data/celeba
+        target: ${WORKING_DIR}/data/celeba
+
     shm_size: '8gb'
+    init: true
+    working_dir: ${WORKING_DIR}
+    environment:
+      - CUDA_HOME=${CUDA_HOME}
+      - XDG_CACHE_HOME=${XDG_CACHE_HOME}
+      - TORCH_EXTENSIONS_DIR=${XDG_CACHE_HOME}/${TORCH_EXTENSIONS_DIR}
+    entrypoint: []
+    user: ${UID:-1000}
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ['0']
+
+
+  preprocess:
+    build:
+      context: .
+      dockerfile: docker/preprocess/Dockerfile
+      args:
+        - BASE_TORCH_VERSION=2.0.1
+        - BASE_CUDA_VERSION=11.7
+        - BASE_CUDNN_VERSION=8
+        - UID=${UID}
+        - USERNAME=torchuser
+
+    volumes:
+      - type: bind
+        source: .
+        target: ${WORKING_DIR}
+      - type: bind
+        source: /mnt/D/Data/animefacedataset
+        target: ${WORKING_DIR}/data/animefacedataset
+      - type: bind
+        source: /mnt/D/Data/danbooru
+        target: ${WORKING_DIR}/data/danbooru
+      - type: bind
+        source: /mnt/D/Data/celeba
+        target: ${WORKING_DIR}/data/celeba
+
+    shm_size: '8gb'
+    init: true
+    working_dir: ${WORKING_DIR}
+    environment:
+      - CUDA_HOME=${CUDA_HOME}
+      - XDG_CACHE_HOME=${XDG_CACHE_HOME}
+      - TORCH_EXTENSIONS_DIR=${XDG_CACHE_HOME}/${TORCH_EXTENSIONS_DIR}
+    entrypoint: []
+    user: ${UID:-1000}
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              device_ids: ['0']

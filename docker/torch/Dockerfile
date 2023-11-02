@@ -1,14 +1,20 @@
-FROM pytorch/pytorch:1.11.0-cuda11.3-cudnn8-devel
+ARG BASE_TORCH_VERSION=2.0.0
+ARG BASE_CUDA_VERSION=11.7
+ARG BASE_CUDNN_VERSION=8
 
-ENV DEBIAN_FRONTEND=noniteractive
+FROM pytorch/pytorch:${BASE_TORCH_VERSION}-cuda${BASE_CUDA_VERSION}-cudnn${BASE_CUDNN_VERSION}-devel
+
 RUN apt update -y && \
-    apt install -y \
-    libopencv-dev
+    DEBIAN_FRONTEND=noniteractive apt install -y \
+    libopencv-dev \
+    git
 
-ARG UID
-RUN useradd -l -m -u ${UID} dockeruser
+ARG UID=1000
+ARG USERNAME=torchuser
+RUN useradd -l -m -u ${UID} ${USERNAME}
 USER ${UID}
-ENV PATH=$PATH:/home/dockeruser/.local/bin
+ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 
-COPY docker/torch/requirements.txt requirements.txt
+# install pip modules
+COPY ./docker/torch/requirements.txt requirements.txt
 RUN pip --default-timeout=100 install --user -r requirements.txt

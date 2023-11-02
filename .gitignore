@@ -2,6 +2,11 @@
 # pickled models
 *.pt
 *.pth
+*.torch
+
+# logging files
+log.log
+events.out.*
 
 # Created by https://www.gitignore.io/api/osx,linux,macos,python,windows,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=osx,linux,macos,python,windows,visualstudiocode

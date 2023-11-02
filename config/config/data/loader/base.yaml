@@ -1,0 +1,5 @@
+batch_size: 32
+shuffle: true
+pin_memory: true
+drop_last: true
+num_workers: 4
